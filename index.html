@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>公開藥品處方集 | Pharmacy Formulary</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <style>
+        body { background-color: #f0f2f5; font-family: "Microsoft JhengHei", "Heiti TC", Arial, sans-serif; }
+        .hero-section { background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); color: white; padding: 30px 0 40px; margin-bottom: 20px; }
+        
+        /* 搜尋與篩選 */
+        .search-container { max-width: 700px; margin: 0 auto; padding: 0 15px; }
+        .filter-container { 
+            display: flex; gap: 10px; overflow-x: auto; padding-bottom: 5px; margin-top: 15px; 
+            justify-content: flex-start; -webkit-overflow-scrolling: touch; 
+        }
+        @media (min-width: 768px) { .filter-container { justify-content: center; } }
+
+        .filter-btn { 
+            white-space: nowrap; border-radius: 20px; padding: 6px 16px; font-size: 0.9rem; 
+            border: 1px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.1); color: white; transition: all 0.2s;
+        }
+        .filter-btn:hover { background: rgba(255,255,255,0.2); color: white; }
+        .filter-btn.active { background: #fff; color: #1e3c72; font-weight: bold; border-color: #fff; box-shadow: 0 4px 10px rgba(0,0,0,0.2); }
+
+        /* 卡片設計 */
+        .drug-card { 
+            border: none; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); 
+            height: 100%; cursor: pointer; background: white; transition: transform 0.2s;
+            display: flex; flex-direction: column; 
+        }
+        .drug-card:hover { transform: translateY(-5px); box-shadow: 0 8px 25px rgba(0,0,0,0.15); border-left: 5px solid #2a5298; }
+        .card-body { padding: 1.25rem; flex: 1; }
+        
+        /* 排版與色塊 */
+        .text-content, .block-content { white-space: pre-line; word-wrap: break-word; overflow-wrap: break-word; line-height: 1.6; color: #333; }
+        
+        /* 色塊樣式定義 */
+        .block-label { font-size: 0.85rem; font-weight: bold; opacity: 0.8; margin-bottom: 4px; display: block; }
+        
+        /* 1. 成份 (紫色系) */
+        .block-ingredient { background-color: #f3e5f5; color: #6a1b9a; border-left: 4px solid #6a1b9a; padding: 10px; border-radius: 4px; margin-bottom: 10px; }
+        
+        /* 2. 適應症 (藍色系) */
+        .block-indication { background-color: #e7f5ff; color: #0056b3; border-left: 4px solid #0056b3; padding: 10px; border-radius: 4px; margin-bottom: 10px; }
+        
+        /* 3. 用法 (綠色系) */
+        .block-usage { background-color: #f0fdf4; color: #15803d; border-left: 4px solid #15803d; padding: 10px; border-radius: 4px; margin-bottom: 10px; }
+        
+        /* 4. 存放 (橘黃色系) */
+        .block-storage { background-color: #fff7ed; color: #9a3412; border-left: 4px solid #9a3412; padding: 10px; border-radius: 4px; margin-bottom: 10px; }
+
+        .info-row { margin-bottom: 10px; display: flex; flex-direction: column; }
+        .info-label { font-weight: bold; color: #555; font-size: 0.9rem; margin-bottom: 2px; }
+        .divider { border-top: 1px dashed #e0e0e0; margin: 12px 0; }
+        .badge-code { background-color: #6c757d; color: white; font-size: 0.9rem;}
+        .text-nhi { color: #0d6efd; font-weight: bold; } 
+        
+        .modal-header { background-color: #f8f9fa; border-bottom: 2px solid #e9ecef; }
+        .detail-title { color: #1e3c72; font-weight: bold; margin: 20px 0 10px; padding-bottom: 5px; border-bottom: 1px solid #dee2e6; display: flex; align-items: center; }
+        .detail-content { background: #fff; padding: 10px; border-radius: 6px; }
+        .alert-box { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; padding: 15px; border-radius: 8px; }
+        
+        .filter-container::-webkit-scrollbar { height: 4px; }
+        .filter-container::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.3); border-radius: 4px; }
+    </style>
+</head>
+<body>
+
+<div class="hero-section text-center">
+    <div class="container">
+        <h1 class="mb-3 fw-bold"><i class="fas fa-capsules me-2"></i>藥品處方集</h1>
+        <div class="search-container">
+            <input type="text" id="searchInput" class="form-control form-control-lg shadow-sm" placeholder="輸入藥名、成分、適應症、儲位..." autocomplete="off" disabled>
+            <div class="filter-container" id="filterBtns">
+                <button class="filter-btn active" onclick="setFilter('ALL', this)">全部</button>
+                <button class="filter-btn" onclick="setFilter('O', this)">口服 (O)</button>
+                <button class="filter-btn" onclick="setFilter('I', this)">針劑 (I)</button>
+                <button class="filter-btn" onclick="setFilter('E', this)">外用 (E)</button>
+                <button class="filter-btn" onclick="setFilter('P', this)">眼用 (P)</button>
+                <button class="filter-btn" onclick="setFilter('L', this)">水劑 (L)</button>
+                <button class="filter-btn" onclick="setFilter('J', this)">洗腎專用 (J)</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="container mb-5">
+    <div class="d-flex justify-content-between align-items-center mb-3 px-2">
+        <span class="fw-bold text-primary" id="resultCount">資料庫連線中...</span>
+    </div>
+    <div id="drugList" class="row g-4"></div>
+</div>
+
+<div class="modal fade" id="drugModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="w-100">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <span class="badge badge-code mb-1" id="modalCode">Code</span>
+                        <span class="badge bg-info text-dark" id="modalClass">藥理分類</span>
+                    </div>
+                    <h3 class="modal-title fw-bold mt-2" id="modalTitle">藥品名稱</h3>
+                    <div class="text-secondary mt-1"><i class="fas fa-flask me-1"></i><span id="modalIngr">成份</span></div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" style="margin-left: 10px;"></button>
+            </div>
+            <div class="modal-body p-4" id="modalBody"></div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">關閉</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+    let allDrugs = [];
+    let filteredDrugs = [];
+    let currentCategory = 'ALL'; 
+    const csvFileName = "drugs.csv?t=" + new Date().getTime(); 
+
+    Papa.parse(csvFileName, {
+        download: true, header: true, skipEmptyLines: true,
+        complete: function(results) {
+            const excludePrefixes = ['X', 'F', 'N'];
+            filteredDrugs = results.data.filter(drug => {
+                const code = (drug['代碼'] || drug['院內代碼'] || Object.values(drug)[0] || '').trim().toUpperCase();
+                if (code.length > 0) {
+                    if (excludePrefixes.includes(code.charAt(0))) return false;
+                }
+                return true;
+            });
+            document.getElementById('resultCount').innerText = `目前收錄 ${filteredDrugs.length} 筆藥品`;
+            document.getElementById('searchInput').disabled = false;
+            applyFilters();
+        },
+        error: function(err) {
+            document.getElementById('resultCount').innerText = "讀取失敗";
+        }
+    });
+
+    window.setFilter = function(category, btnElement) {
+        currentCategory = category;
+        document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
+        btnElement.classList.add('active');
+        applyFilters();
+    };
+
+    // --- 搜尋與權重排序邏輯 (保持優先搜尋成分與名稱) ---
+    function applyFilters() {
+        const keyword = document.getElementById('searchInput').value.toLowerCase().trim();
+        let result = filteredDrugs;
+
+        // 1. 先做分類篩選
+        if (currentCategory !== 'ALL') {
+            result = result.filter(drug => {
+                const code = (drug['代碼'] || drug['院內代碼'] || Object.values(drug)[0] || '').trim().toUpperCase();
+                return code.startsWith(currentCategory);
+            });
+        }
+
+        // 2. 再做關鍵字搜尋與排序
+        if (keyword) {
+            let scoredResults = result.map(drug => {
+                let score = 0;
+                
+                // 取出各欄位值 (轉小寫方便比對)
+                const name = (drug['名稱'] || drug['藥品名稱'] || Object.values(drug)[1] || '').toLowerCase();
+                const ingr = (drug['主要成份'] || '').toLowerCase();
+                const code = (drug['代碼'] || drug['院內代碼'] || Object.values(drug)[0] || '').toLowerCase();
+
+                // === 權重規則 ===
+                // 優先權 1 (最高): 關鍵字出現在「名稱」或「主要成份」
+                if (name.includes(keyword) || ingr.includes(keyword)) {
+                    score = 10;
+                }
+                // 優先權 2 (次高): 關鍵字出現在「代碼」
+                else if (code.includes(keyword)) {
+                    score = 5;
+                }
+                // 優先權 3 (普通): 關鍵字出現在其他欄位
+                else if (Object.values(drug).some(val => String(val).toLowerCase().includes(keyword))) {
+                    score = 1;
+                }
+
+                return { drug, score };
+            });
+
+            // 過濾掉分數為 0 的，並排序
+            result = scoredResults
+                .filter(item => item.score > 0)
+                .sort((a, b) => b.score - a.score)
+                .map(item => item.drug); 
+        }
+
+        document.getElementById('resultCount').innerText = `搜尋結果：共 ${result.length} 筆 (分類: ${getCategoryName(currentCategory)})`;
+        renderDrugs(result.slice(0, 50));
+    }
+    
+    document.getElementById('searchInput').addEventListener('input', applyFilters);
+
+    function getCategoryName(cat) {
+        const map = { 'ALL': '全部', 'O': '口服', 'I': '針劑', 'E': '外用', 'P': '眼用', 'L': '水劑', 'J': '洗腎室' };
+        return map[cat] || cat;
+    }
+
+    function renderDrugs(drugs) {
+        const container = document.getElementById('drugList');
+        container.innerHTML = '';
+        
+        if (drugs.length === 0) {
+            container.innerHTML = '<div class="col-12 text-center text-muted py-5">無符合資料</div>';
+            return;
+        }
+
+        drugs.forEach((drug) => {
+            const getStr = (key) => (drug[key] || '').trim();
+            const name = drug['名稱'] || drug['藥品名稱'] || Object.values(drug)[1];
+            const code = drug['代碼'] || drug['院內代碼'] || Object.values(drug)[0];
+
+            const col = document.createElement('div');
+            col.className = 'col-lg-4 col-md-6 col-sm-12';
+            col.innerHTML = `
+                <div class="card drug-card" onclick='openDetail(${JSON.stringify(drug).replace(/'/g, "&#39;")})'>
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between mb-2">
+                            <span class="badge badge-code">${code}</span>
+                        </div>
+                        
+                        <h4 class="card-title fw-bold text-primary mb-2">${name}</h4>
+                        <div class="text-secondary small mb-3"><i class="fas fa-flask me-1"></i>${getStr('主要成份')}</div>
+                        
+                        ${getStr('藥理分類名稱') ? `<div class="badge bg-light text-dark border mb-3" style="white-space: normal; text-align:left;">${getStr('藥理分類名稱')}</div>` : ''}
+
+                        ${getStr('主要成份') ? `<div class="block-ingredient"><span class="block-label"><i class="fas fa-flask me-1"></i>主要成份</span><div class="block-content">${getStr('主要成份')}</div></div>` : ''}
+                        ${getStr('適應症') ? `<div class="block-indication"><span class="block-label"><i class="fas fa-stethoscope me-1"></i>適應症</span><div class="block-content">${getStr('適應症')}</div></div>` : ''}
+                        ${getStr('劑量及用法') ? `<div class="block-usage"><span class="block-label"><i class="fas fa-clock me-1"></i>用法</span><div class="block-content">${getStr('劑量及用法')}</div></div>` : ''}
+                        ${getStr('藥品該如何存放') ? `<div class="block-storage"><span class="block-label"><i class="fas fa-temperature-low me-1"></i>存放</span><div class="block-content">${getStr('藥品該如何存放')}</div></div>` : ''}
+                        
+                        ${getStr('臨床用途(中文)') ? `<div class="info-row mt-2"><span class="info-label text-nhi">健保規範:</span><span class="text-content text-nhi">${getStr('臨床用途(中文)')}</span></div>` : ''}
+                        ${getStr('作用') ? `<div class="info-row mt-2"><span class="info-label">作用:</span><span class="text-content text-muted">${getStr('作用')}</span></div>` : ''}
+                        ${getStr('注意事項1') ? `<div class="mt-2 p-2 bg-light border rounded small text-danger text-content"><i class="fas fa-exclamation-circle me-1"></i>${getStr('注意事項1')}</div>` : ''}
+                            
+                        ${getStr('儲存方式') ? `<div class="divider"></div><div class="text-end text-muted small">儲位: ${getStr('儲存方式')}</div>` : ''}
+                    </div>
+                </div>
+            `;
+            container.appendChild(col);
+        });
+    }
+
+    window.openDetail = function(drug) {
+        const getStr = (key) => (drug[key] || '').trim();
+        document.getElementById('modalTitle').innerText = drug['名稱'] || drug['藥品名稱'] || '';
+        document.getElementById('modalCode').innerText = drug['代碼'] || drug['院內代碼'] || '';
+        document.getElementById('modalIngr').innerText = getStr('主要成份');
+        document.getElementById('modalClass').innerText = getStr('藥理分類名稱') || '未分類';
+        
+        let html = '';
+
+        // 詳情頁的內容
+        if (getStr('主要成份')) html += `<div class="block-ingredient"><span class="block-label"><i class="fas fa-flask me-1"></i>主要成份</span><div class="block-content">${getStr('主要成份')}</div></div>`;
+        if (getStr('適應症')) html += `<div class="block-indication"><span class="block-label"><i class="fas fa-stethoscope me-1"></i>適應症</span><div class="block-content">${getStr('適應症')}</div></div>`;
+        if (getStr('劑量及用法')) html += `<div class="block-usage"><span class="block-label"><i class="fas fa-clock me-1"></i>劑量及用法</span><div class="block-content">${getStr('劑量及用法')}</div></div>`;
+        if (getStr('藥品該如何存放')) html += `<div class="block-storage"><span class="block-label"><i class="fas fa-temperature-low me-1"></i>藥品該如何存放</span><div class="block-content">${getStr('藥品該如何存放')}</div></div>`;
+
+        if (getStr('臨床用途(中文)')) html += `<div class="detail-title"><i class="fas fa-file-invoice-dollar me-2"></i>健保給付規範</div><div class="detail-content text-content text-nhi">${getStr('臨床用途(中文)')}</div>`;
+        if (getStr('作用')) html += `<div class="detail-title"><i class="fas fa-bolt me-2"></i>作用</div><div class="detail-content text-content">${getStr('作用')}</div>`;
+        if (getStr('注意事項1')) html += `<div class="detail-title text-danger"><i class="fas fa-exclamation-triangle me-2"></i>注意事項</div><div class="alert-box text-content">${getStr('注意事項1')}</div>`;
+        if (getStr('儲存方式')) html += `<div class="mt-4 text-end text-muted border-top pt-2">倉庫/藥局儲位：${getStr('儲存方式')}</div>`;
+
+        document.getElementById('modalBody').innerHTML = html;
+        new bootstrap.Modal(document.getElementById('drugModal')).show();
+    };
+</script>
+</body>
+</html>
