@@ -11,7 +11,7 @@
         /* 預留頂部空間 */
         body { background-color: #f0f2f5; font-family: "Microsoft JhengHei", "Heiti TC", Arial, sans-serif; padding-top: 190px; }
         
-        /* 固定置頂區域 - 預設藍色 (藥品) */
+        /* 固定置頂區域 */
         .fixed-header {
             position: fixed; top: 0; left: 0; width: 100%; z-index: 1000;
             background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
@@ -151,13 +151,12 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
 <script>
-    let drugList = [];     // 藥品清單
-    let foodList = [];     // 食品清單
+    let drugList = [];     
+    let foodList = [];     
     let currentMode = 'DRUG'; 
     let currentCategory = 'ALL'; 
     const csvFileName = "drugs.csv?t=" + new Date().getTime(); 
 
-    // --- 自動調整版面功能 ---
     function adjustLayout() {
         const header = document.getElementById('myHeader');
         if(header) {
@@ -167,26 +166,41 @@
     }
     window.addEventListener('resize', adjustLayout);
 
+    // --- 關鍵修改：更強大的取值函式 (容錯處理) ---
+    function getValue(item, keys) {
+        if (!Array.isArray(keys)) keys = [keys];
+        for (let key of keys) {
+            if (item[key] !== undefined) return item[key].trim();
+        }
+        return '';
+    }
 
     Papa.parse(csvFileName, {
-        download: true, header: true, skipEmptyLines: true,
+        download: true, 
+        header: true, 
+        skipEmptyLines: true,
+        // 1. 自動清除標題前後空白
+        transformHeader: function(h) {
+            return h.trim();
+        },
         complete: function(results) {
             const excludePrefixes = ['X', 'F', 'N']; 
             
             results.data.forEach(item => {
-                const pharmName = (item['藥理分類名稱'] || '').trim();
-                const code = (item['代碼'] || item['院內代碼'] || Object.values(item)[0] || '').trim().toUpperCase();
-                const type = (item['中西藥別'] || '').trim(); // 取得中西藥別
+                // 使用 getValue 嘗試多種欄位名稱，避免 CSV 標題不一致
+                const pharmName = getValue(item, ['藥理分類名稱', '藥理分類']);
+                const code = getValue(item, ['代碼', '院內代碼', '藥品代碼']).toUpperCase();
+                const name = getValue(item, ['名稱', '藥品名稱', '中文品名']);
+                const type = getValue(item, ['中西藥別', '藥別']); // 支援「中西藥別」或「藥別」
 
-                // 1. 停用檢查 (New!)
-                if (type === '停用') {
-                    return; // 直接跳過，不加入任何清單
-                }
+                // 0. 排除沒有名稱或代碼的空行
+                if (!name && !code) return;
 
-                // 2. 嚴格過濾垃圾資料 (X, F, N 開頭)
-                if (code.length > 0 && excludePrefixes.includes(code.charAt(0))) {
-                    return; 
-                }
+                // 1. 停用檢查 (只要該欄位是"停用"，就直接再見)
+                if (type === '停用') return;
+
+                // 2. 嚴格過濾垃圾資料
+                if (code.length > 0 && excludePrefixes.includes(code.charAt(0))) return; 
 
                 // 3. 分流：藥品 vs 食品
                 if (pharmName.includes('食品') || pharmName.includes('營養')) {
@@ -197,30 +211,27 @@
             });
 
             document.getElementById('searchInput').disabled = false;
-            switchMode('DRUG'); // 預設顯示藥品
+            switchMode('DRUG'); 
         },
         error: function(err) {
-            document.getElementById('resultCount').innerText = "讀取失敗";
+            document.getElementById('resultCount').innerText = "讀取失敗，請確認檔案格式";
         }
     });
 
-    // --- 模式切換邏輯 (含顏色切換) ---
     window.switchMode = function(mode) {
         currentMode = mode;
         const header = document.getElementById('myHeader');
         
-        // 切換按鈕與背景
         document.getElementById('btnModeDrug').classList.toggle('active', mode === 'DRUG');
         document.getElementById('btnModeFood').classList.toggle('active', mode === 'FOOD');
 
         const filterDiv = document.getElementById('drugFilters');
-        
         if (mode === 'DRUG') {
             filterDiv.style.display = 'flex';
-            header.classList.remove('food-mode'); // 藍色
+            header.classList.remove('food-mode'); 
         } else {
             filterDiv.style.display = 'none';
-            header.classList.add('food-mode'); // 黃色
+            header.classList.add('food-mode'); 
         }
 
         currentCategory = 'ALL';
@@ -241,14 +252,12 @@
 
     function applyFilters() {
         const keyword = document.getElementById('searchInput').value.toLowerCase().trim();
-        
-        // 1. 決定要搜哪個清單
         let targetList = (currentMode === 'DRUG') ? drugList : foodList;
         let result = targetList;
 
         if (currentMode === 'DRUG' && currentCategory !== 'ALL') {
             result = result.filter(item => {
-                const code = (item['代碼'] || item['院內代碼'] || Object.values(item)[0] || '').trim().toUpperCase();
+                const code = getValue(item, ['代碼', '院內代碼']).toUpperCase();
                 return code.startsWith(currentCategory);
             });
         }
@@ -256,12 +265,11 @@
         if (keyword) {
             let scoredResults = result.map(item => {
                 let score = 0;
-                // 對應 CSV 欄位
-                const name = (item['名稱'] || item['藥品名稱'] || '').toLowerCase();
-                const ingr = (item['主要成份'] || '').toLowerCase();
-                const code = (item['代碼'] || item['院內代碼'] || '').toLowerCase();
+                // 擴充搜尋欄位
+                const name = getValue(item, ['名稱', '藥品名稱', '中文品名']).toLowerCase();
+                const ingr = getValue(item, ['主要成份', '成份']).toLowerCase();
+                const code = getValue(item, ['代碼', '院內代碼']).toLowerCase();
 
-                // 權重規則
                 if (name.includes(keyword) || ingr.includes(keyword)) score = 10;
                 else if (code.includes(keyword)) score = 5;
                 else if (Object.values(item).some(val => String(val).toLowerCase().includes(keyword))) score = 1;
@@ -293,10 +301,18 @@
         }
 
         items.forEach((item) => {
-            const getStr = (key) => (item[key] || '').trim();
-            // 對應 CSV 欄位
-            const name = item['名稱'] || item['藥品名稱'] || '';
-            const code = item['代碼'] || item['院內代碼'] || '';
+            // 使用 getValue 來安全獲取資料
+            const name = getValue(item, ['名稱', '藥品名稱', '中文品名']);
+            const code = getValue(item, ['代碼', '院內代碼']);
+            const ingredient = getValue(item, ['主要成份', '成份']);
+            const pharmClass = getValue(item, ['藥理分類名稱', '藥理分類']);
+            const indication = getValue(item, ['適應症', '適應症(中文)']);
+            const dosage = getValue(item, ['劑量及用法', '用法用量']);
+            const howToStore = getValue(item, ['藥品該如何存放']);
+            const nhiRule = getValue(item, ['臨床用途(中文)']);
+            const action = getValue(item, ['作用']);
+            const warning = getValue(item, ['注意事項1', '注意事項', '藥品警語(中文)']);
+            const storageLoc = getValue(item, ['儲存方式']);
 
             const col = document.createElement('div');
             col.className = 'col-lg-4 col-md-6 col-sm-12';
@@ -308,21 +324,20 @@
                         </div>
                         
                         <h4 class="card-title fw-bold text-primary mb-2">${name}</h4>
-                        <div class="text-secondary small mb-3"><i class="fas fa-flask me-1"></i>${getStr('主要成份')}</div>
+                        <div class="text-secondary small mb-3"><i class="fas fa-flask me-1"></i>${ingredient}</div>
                         
-                        ${getStr('藥理分類名稱') ? `<div class="badge bg-light text-dark border mb-3" style="white-space: normal; text-align:left;">${getStr('藥理分類名稱')}</div>` : ''}
+                        ${pharmClass ? `<div class="badge bg-light text-dark border mb-3" style="white-space: normal; text-align:left;">${pharmClass}</div>` : ''}
 
-                        ${getStr('主要成份') ? `<div class="block-ingredient"><span class="block-label"><i class="fas fa-flask me-1"></i>主要成份</span><div class="block-content">${getStr('主要成份')}</div></div>` : ''}
-                        ${getStr('適應症') ? `<div class="block-indication"><span class="block-label"><i class="fas fa-stethoscope me-1"></i>適應症</span><div class="block-content">${getStr('適應症')}</div></div>` : ''}
-                        ${getStr('劑量及用法') ? `<div class="block-usage"><span class="block-label"><i class="fas fa-clock me-1"></i>用法</span><div class="block-content">${getStr('劑量及用法')}</div></div>` : ''}
-                        ${getStr('藥品該如何存放') ? `<div class="block-storage"><span class="block-label"><i class="fas fa-temperature-low me-1"></i>存放</span><div class="block-content">${getStr('藥品該如何存放')}</div></div>` : ''}
+                        ${ingredient ? `<div class="block-ingredient"><span class="block-label"><i class="fas fa-flask me-1"></i>主要成份</span><div class="block-content">${ingredient}</div></div>` : ''}
+                        ${indication ? `<div class="block-indication"><span class="block-label"><i class="fas fa-stethoscope me-1"></i>適應症</span><div class="block-content">${indication}</div></div>` : ''}
+                        ${dosage ? `<div class="block-usage"><span class="block-label"><i class="fas fa-clock me-1"></i>用法</span><div class="block-content">${dosage}</div></div>` : ''}
+                        ${howToStore ? `<div class="block-storage"><span class="block-label"><i class="fas fa-temperature-low me-1"></i>存放</span><div class="block-content">${howToStore}</div></div>` : ''}
                         
-                        ${getStr('臨床用途(中文)') ? `<div class="info-row mt-2"><span class="info-label text-nhi">健保規範:</span><span class="text-content text-nhi">${getStr('臨床用途(中文)')}</span></div>` : ''}
-                        ${getStr('作用') ? `<div class="info-row mt-2"><span class="info-label">作用:</span><span class="text-content text-muted">${getStr('作用')}</span></div>` : ''}
-                        
-                        ${(getStr('注意事項1') || getStr('注意事項')) ? `<div class="mt-2 p-2 bg-light border rounded small text-danger text-content"><i class="fas fa-exclamation-circle me-1"></i>${getStr('注意事項1') || getStr('注意事項')}</div>` : ''}
+                        ${nhiRule ? `<div class="info-row mt-2"><span class="info-label text-nhi">健保規範:</span><span class="text-content text-nhi">${nhiRule}</span></div>` : ''}
+                        ${action ? `<div class="info-row mt-2"><span class="info-label">作用:</span><span class="text-content text-muted">${action}</span></div>` : ''}
+                        ${warning ? `<div class="mt-2 p-2 bg-light border rounded small text-danger text-content"><i class="fas fa-exclamation-circle me-1"></i>${warning}</div>` : ''}
                             
-                        ${getStr('儲存方式') ? `<div class="divider"></div><div class="text-end text-muted small">儲位: ${getStr('儲存方式')}</div>` : ''}
+                        ${storageLoc ? `<div class="divider"></div><div class="text-end text-muted small">儲位: ${storageLoc}</div>` : ''}
                     </div>
                 </div>
             `;
@@ -331,14 +346,25 @@
     }
 
     window.openDetail = function(item) {
-        const getStr = (key) => (item[key] || '').trim();
-        document.getElementById('modalTitle').innerText = item['名稱'] || item['藥品名稱'] || '';
-        document.getElementById('modalCode').innerText = item['代碼'] || item['院內代碼'] || '';
-        document.getElementById('modalIngr').innerText = getStr('主要成份');
-        document.getElementById('modalClass').innerText = getStr('藥理分類名稱') || '未分類';
+        // 使用 getValue 來安全獲取資料
+        const name = getValue(item, ['名稱', '藥品名稱', '中文品名']);
+        const code = getValue(item, ['代碼', '院內代碼']);
+        const ingredient = getValue(item, ['主要成份', '成份']);
+        const pharmClass = getValue(item, ['藥理分類名稱', '藥理分類']);
+        const indication = getValue(item, ['適應症', '適應症(中文)']);
+        const dosage = getValue(item, ['劑量及用法', '用法用量']);
+        const howToStore = getValue(item, ['藥品該如何存放']);
+        const nhiRule = getValue(item, ['臨床用途(中文)']);
+        const action = getValue(item, ['作用']);
+        const warning = getValue(item, ['注意事項1', '注意事項', '藥品警語(中文)']);
+        const storageLoc = getValue(item, ['儲存方式']);
+        const nhiCode = getValue(item, ['健保碼']);
+
+        document.getElementById('modalTitle').innerText = name;
+        document.getElementById('modalCode').innerText = code;
+        document.getElementById('modalIngr').innerText = ingredient;
+        document.getElementById('modalClass').innerText = pharmClass || '未分類';
         
-        // 顯示健保碼 (如果有)
-        const nhiCode = getStr('健保碼');
         const badgeNhi = document.getElementById('modalNhiCode');
         if(nhiCode && nhiCode !== '0') {
             badgeNhi.innerText = `健保碼: ${nhiCode}`;
@@ -348,18 +374,15 @@
         }
         
         let html = '';
-        if (getStr('主要成份')) html += `<div class="block-ingredient"><span class="block-label"><i class="fas fa-flask me-1"></i>主要成份</span><div class="block-content">${getStr('主要成份')}</div></div>`;
-        if (getStr('適應症')) html += `<div class="block-indication"><span class="block-label"><i class="fas fa-stethoscope me-1"></i>適應症</span><div class="block-content">${getStr('適應症')}</div></div>`;
-        if (getStr('劑量及用法')) html += `<div class="block-usage"><span class="block-label"><i class="fas fa-clock me-1"></i>劑量及用法</span><div class="block-content">${getStr('劑量及用法')}</div></div>`;
-        if (getStr('藥品該如何存放')) html += `<div class="block-storage"><span class="block-label"><i class="fas fa-temperature-low me-1"></i>藥品該如何存放</span><div class="block-content">${getStr('藥品該如何存放')}</div></div>`;
+        if (ingredient) html += `<div class="block-ingredient"><span class="block-label"><i class="fas fa-flask me-1"></i>主要成份</span><div class="block-content">${ingredient}</div></div>`;
+        if (indication) html += `<div class="block-indication"><span class="block-label"><i class="fas fa-stethoscope me-1"></i>適應症</span><div class="block-content">${indication}</div></div>`;
+        if (dosage) html += `<div class="block-usage"><span class="block-label"><i class="fas fa-clock me-1"></i>劑量及用法</span><div class="block-content">${dosage}</div></div>`;
+        if (howToStore) html += `<div class="block-storage"><span class="block-label"><i class="fas fa-temperature-low me-1"></i>藥品該如何存放</span><div class="block-content">${howToStore}</div></div>`;
 
-        if (getStr('臨床用途(中文)')) html += `<div class="detail-title"><i class="fas fa-file-invoice-dollar me-2"></i>健保給付規範</div><div class="detail-content text-content text-nhi">${getStr('臨床用途(中文)')}</div>`;
-        if (getStr('作用')) html += `<div class="detail-title"><i class="fas fa-bolt me-2"></i>作用</div><div class="detail-content text-content">${getStr('作用')}</div>`;
-        
-        const warning = getStr('注意事項1') || getStr('注意事項');
+        if (nhiRule) html += `<div class="detail-title"><i class="fas fa-file-invoice-dollar me-2"></i>健保給付規範</div><div class="detail-content text-content text-nhi">${nhiRule}</div>`;
+        if (action) html += `<div class="detail-title"><i class="fas fa-bolt me-2"></i>作用</div><div class="detail-content text-content">${action}</div>`;
         if (warning) html += `<div class="detail-title text-danger"><i class="fas fa-exclamation-triangle me-2"></i>注意事項</div><div class="alert-box text-content">${warning}</div>`;
-        
-        if (getStr('儲存方式')) html += `<div class="mt-4 text-end text-muted border-top pt-2">倉庫/藥局儲位：${getStr('儲存方式')}</div>`;
+        if (storageLoc) html += `<div class="mt-4 text-end text-muted border-top pt-2">倉庫/藥局儲位：${storageLoc}</div>`;
 
         document.getElementById('modalBody').innerHTML = html;
         new bootstrap.Modal(document.getElementById('drugModal')).show();
