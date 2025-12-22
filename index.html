@@ -120,6 +120,7 @@
     <div class="d-flex justify-content-between align-items-center mb-3 px-2">
         <span class="fw-bold text-primary" id="resultCount">資料庫連線中...</span>
     </div>
+    <div id="errorBox" class="alert alert-danger" style="display:none;"></div>
     <div id="drugList" class="row g-4"></div>
 </div>
 
@@ -166,11 +167,13 @@
     }
     window.addEventListener('resize', adjustLayout);
 
-    // --- 關鍵修改：更強大的取值函式 (容錯處理) ---
+    // --- 關鍵修改：容錯取值 ---
     function getValue(item, keys) {
         if (!Array.isArray(keys)) keys = [keys];
         for (let key of keys) {
-            if (item[key] !== undefined) return item[key].trim();
+            if (item[key] !== undefined && item[key] !== null) {
+                return String(item[key]).trim();
+            }
         }
         return '';
     }
@@ -179,27 +182,32 @@
         download: true, 
         header: true, 
         skipEmptyLines: true,
-        // 1. 自動清除標題前後空白
+        // 強制處理檔頭：去空白、去 BOM
         transformHeader: function(h) {
-            return h.trim();
+            return h.replace(/^\ufeff/, '').trim();
         },
         complete: function(results) {
             const excludePrefixes = ['X', 'F', 'N']; 
             
+            // 診斷：如果完全沒讀到資料，顯示欄位名稱
+            if (results.data.length === 0) {
+                document.getElementById('resultCount').innerText = "讀取到的資料為 0 筆";
+                return;
+            }
+
             results.data.forEach(item => {
-                // 使用 getValue 嘗試多種欄位名稱，避免 CSV 標題不一致
                 const pharmName = getValue(item, ['藥理分類名稱', '藥理分類']);
                 const code = getValue(item, ['代碼', '院內代碼', '藥品代碼']).toUpperCase();
                 const name = getValue(item, ['名稱', '藥品名稱', '中文品名']);
                 const type = getValue(item, ['中西藥別', '藥別']); // 支援「中西藥別」或「藥別」
 
-                // 0. 排除沒有名稱或代碼的空行
+                // 0. 基本檢查：沒有名稱也沒有代碼，視為空行
                 if (!name && !code) return;
 
-                // 1. 停用檢查 (只要該欄位是"停用"，就直接再見)
+                // 1. 停用檢查：只要是"停用"，直接再見
                 if (type === '停用') return;
 
-                // 2. 嚴格過濾垃圾資料
+                // 2. 嚴格過濾垃圾資料 (X, F, N 開頭)
                 if (code.length > 0 && excludePrefixes.includes(code.charAt(0))) return; 
 
                 // 3. 分流：藥品 vs 食品
@@ -210,11 +218,19 @@
                 }
             });
 
+            // 診斷：如果分流後兩邊都沒資料
+            if (drugList.length === 0 && foodList.length === 0) {
+                const fields = results.meta.fields.join(", ");
+                const errorMsg = `警示：雖然讀取到檔案，但沒有符合條件的藥品。可能是欄位名稱對不上。\n目前讀到的欄位有：[${fields}]`;
+                document.getElementById('errorBox').innerText = errorMsg;
+                document.getElementById('errorBox').style.display = 'block';
+            }
+
             document.getElementById('searchInput').disabled = false;
             switchMode('DRUG'); 
         },
         error: function(err) {
-            document.getElementById('resultCount').innerText = "讀取失敗，請確認檔案格式";
+            document.getElementById('resultCount').innerText = "讀取失敗，請確認 drugs.csv 檔案存在且格式正確 (建議另存為 CSV UTF-8)";
         }
     });
 
@@ -265,7 +281,6 @@
         if (keyword) {
             let scoredResults = result.map(item => {
                 let score = 0;
-                // 擴充搜尋欄位
                 const name = getValue(item, ['名稱', '藥品名稱', '中文品名']).toLowerCase();
                 const ingr = getValue(item, ['主要成份', '成份']).toLowerCase();
                 const code = getValue(item, ['代碼', '院內代碼']).toLowerCase();
@@ -301,7 +316,6 @@
         }
 
         items.forEach((item) => {
-            // 使用 getValue 來安全獲取資料
             const name = getValue(item, ['名稱', '藥品名稱', '中文品名']);
             const code = getValue(item, ['代碼', '院內代碼']);
             const ingredient = getValue(item, ['主要成份', '成份']);
@@ -346,7 +360,6 @@
     }
 
     window.openDetail = function(item) {
-        // 使用 getValue 來安全獲取資料
         const name = getValue(item, ['名稱', '藥品名稱', '中文品名']);
         const code = getValue(item, ['代碼', '院內代碼']);
         const ingredient = getValue(item, ['主要成份', '成份']);
