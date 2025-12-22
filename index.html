@@ -8,51 +8,29 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
     <style>
-        body { background-color: #f0f2f5; font-family: "Microsoft JhengHei", "Heiti TC", Arial, sans-serif; }
+        /* 預留頂部空間 */
+        body { background-color: #f0f2f5; font-family: "Microsoft JhengHei", "Heiti TC", Arial, sans-serif; padding-top: 190px; }
         
-        /* --- 固定置頂區域 (Sticky Header) --- */
+        /* 固定置頂區域 */
         .fixed-header {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            z-index: 1000;
+            position: fixed; top: 0; left: 0; width: 100%; z-index: 1000;
             background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-            color: white;
-            padding: 15px 0 10px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            transition: all 0.3s ease;
+            color: white; padding: 15px 0 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
         }
 
         /* 模式切換按鈕 */
         .mode-switch-container {
-            display: flex;
-            justify-content: center;
-            margin-bottom: 12px;
-            background: rgba(0,0,0,0.2);
-            padding: 4px;
-            border-radius: 25px;
-            width: fit-content;
-            margin-left: auto;
-            margin-right: auto;
+            display: flex; justify-content: center; margin-bottom: 12px;
+            background: rgba(0,0,0,0.2); padding: 4px; border-radius: 25px;
+            width: fit-content; margin-left: auto; margin-right: auto;
         }
         .mode-btn {
-            border: none;
-            background: transparent;
-            color: rgba(255,255,255,0.7);
-            padding: 5px 20px;
-            border-radius: 20px;
-            font-size: 0.95rem;
-            font-weight: bold;
-            transition: all 0.2s;
+            border: none; background: transparent; color: rgba(255,255,255,0.7);
+            padding: 5px 20px; border-radius: 20px; font-size: 0.95rem; font-weight: bold; transition: all 0.2s;
         }
-        .mode-btn.active {
-            background: white;
-            color: #1e3c72;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-        }
+        .mode-btn.active { background: white; color: #1e3c72; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
         
-        /* 搜尋框與篩選 */
+        /* 搜尋與篩選 */
         .search-container { max-width: 700px; margin: 0 auto; padding: 0 15px; }
         .filter-container { 
             display: flex; gap: 8px; overflow-x: auto; padding-bottom: 5px; margin-top: 10px; 
@@ -78,10 +56,8 @@
         
         /* 排版與色塊 */
         .text-content, .block-content { white-space: pre-line; word-wrap: break-word; overflow-wrap: break-word; line-height: 1.6; color: #333; }
-        
         .block-label { font-size: 0.85rem; font-weight: bold; opacity: 0.8; margin-bottom: 4px; display: block; }
         
-        /* 色塊定義 */
         .block-ingredient { background-color: #f3e5f5; color: #6a1b9a; border-left: 4px solid #6a1b9a; padding: 10px; border-radius: 4px; margin-bottom: 10px; }
         .block-indication { background-color: #e7f5ff; color: #0056b3; border-left: 4px solid #0056b3; padding: 10px; border-radius: 4px; margin-bottom: 10px; }
         .block-usage { background-color: #f0fdf4; color: #15803d; border-left: 4px solid #15803d; padding: 10px; border-radius: 4px; margin-bottom: 10px; }
@@ -98,7 +74,6 @@
         .detail-content { background: #fff; padding: 10px; border-radius: 6px; }
         .alert-box { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; padding: 15px; border-radius: 8px; }
         
-        /* 隱藏捲軸 */
         .filter-container::-webkit-scrollbar { height: 4px; }
         .filter-container::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.3); border-radius: 4px; }
     </style>
@@ -169,48 +144,44 @@
     const csvFileName = "drugs.csv?t=" + new Date().getTime(); 
 
     // --- 自動調整版面功能 ---
-    // 解決藍色區塊擋住搜尋結果的問題
     function adjustLayout() {
         const header = document.getElementById('myHeader');
         if(header) {
-            // 取得目前 Header 的高度，並加上一點緩衝 (20px)
             const height = header.offsetHeight;
             document.body.style.paddingTop = (height + 20) + 'px';
         }
     }
-    // 監聽視窗大小改變，隨時調整
     window.addEventListener('resize', adjustLayout);
 
 
     Papa.parse(csvFileName, {
         download: true, header: true, skipEmptyLines: true,
         complete: function(results) {
-            const excludePrefixes = ['X', 'F', 'N']; 
+            const excludePrefixes = ['X', 'F']; 
             
-            // 跑迴圈分類每一筆資料
             results.data.forEach(item => {
+                // 取得藥理分類，並轉成文字、去空白、轉小寫，以便寬鬆比對
                 const pharmName = (item['藥理分類名稱'] || '').trim();
                 const code = (item['代碼'] || item['院內代碼'] || Object.values(item)[0] || '').trim().toUpperCase();
 
-                // 1. 先判斷是不是食品 (最高優先權)
-                if (pharmName === '食品' || pharmName === '營養補充品') {
+                // === 關鍵修改：超強容錯判斷 ===
+                // 只要藥理分類裡面「包含」食品或營養這幾個字，就算數！
+                if (pharmName.includes('食品') || pharmName.includes('營養')) {
                     foodList.push(item);
                 } 
-                // 2. 如果不是食品，再檢查是否為垃圾資料 (X, F, N 開頭)
                 else {
+                    // 如果不是食品，再檢查是否為垃圾資料
                     let isExcluded = false;
                     if (code.length > 0 && excludePrefixes.includes(code.charAt(0))) {
                         isExcluded = true;
                     }
 
-                    // 3. 只有沒被排除的，才放入藥品區
                     if (!isExcluded) {
                         drugList.push(item);
                     }
                 }
             });
 
-            // 初始化
             document.getElementById('searchInput').disabled = false;
             switchMode('DRUG'); // 預設顯示藥品
         },
@@ -222,12 +193,9 @@
     // --- 模式切換邏輯 ---
     window.switchMode = function(mode) {
         currentMode = mode;
-        
-        // 更新按鈕樣式
         document.getElementById('btnModeDrug').classList.toggle('active', mode === 'DRUG');
         document.getElementById('btnModeFood').classList.toggle('active', mode === 'FOOD');
 
-        // 更新篩選器顯示
         const filterDiv = document.getElementById('drugFilters');
         if (mode === 'DRUG') {
             filterDiv.style.display = 'flex';
@@ -235,17 +203,12 @@
             filterDiv.style.display = 'none';
         }
 
-        // 重置篩選條件
         currentCategory = 'ALL';
         document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
         if(document.querySelector('.filter-btn')) document.querySelector('.filter-btn').classList.add('active');
         
-        document.getElementById('searchInput').value = ''; // 清空搜尋
-        
-        // 關鍵：切換模式後，Header 高度會變，立刻重新計算版面
-        // 使用 setTimeout 確保畫面渲染完畢後才計算
+        document.getElementById('searchInput').value = ''; 
         setTimeout(adjustLayout, 10);
-        
         applyFilters();
     };
 
@@ -258,12 +221,9 @@
 
     function applyFilters() {
         const keyword = document.getElementById('searchInput').value.toLowerCase().trim();
-        
-        // 1. 決定要搜哪個清單
         let targetList = (currentMode === 'DRUG') ? drugList : foodList;
         let result = targetList;
 
-        // 2. 藥品模式下，執行分類篩選 (口服/針劑...)
         if (currentMode === 'DRUG' && currentCategory !== 'ALL') {
             result = result.filter(item => {
                 const code = (item['代碼'] || item['院內代碼'] || Object.values(item)[0] || '').trim().toUpperCase();
@@ -271,7 +231,6 @@
             });
         }
 
-        // 3. 關鍵字搜尋與權重排序
         if (keyword) {
             let scoredResults = result.map(item => {
                 let score = 0;
@@ -292,12 +251,9 @@
                 .map(x => x.item);
         }
 
-        // 顯示結果
         const modeName = (currentMode === 'DRUG') ? '藥品' : '食品/營養品';
         document.getElementById('resultCount').innerText = `${modeName}搜尋結果：共 ${result.length} 筆`;
         renderDrugs(result.slice(0, 50));
-        
-        // 搜尋結果出來後，也重新調整一下版面以防萬一
         setTimeout(adjustLayout, 10);
     }
     
