@@ -11,7 +11,24 @@
         /* 預留頂部空間 */
         body { background-color: #f0f2f5; font-family: "Microsoft JhengHei", "Heiti TC", Arial, sans-serif; padding-top: 190px; }
         
-        /* 固定置頂區域 - 預設藍色 (藥品) */
+        /* --- 攔截畫面樣式 --- */
+        #accessDenied {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: #fff;
+            z-index: 9999; /* 最高層級，蓋住所有內容 */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 20px;
+        }
+        .denied-icon { font-size: 4rem; color: #dc3545; margin-bottom: 20px; }
+        .denied-text { font-size: 1.5rem; font-weight: bold; color: #333; }
+        .denied-sub { color: #666; margin-top: 10px; }
+
+        /* 固定置頂區域 */
         .fixed-header {
             position: fixed; top: 0; left: 0; width: 100%; z-index: 1000;
             background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
@@ -91,37 +108,47 @@
 </head>
 <body>
 
-<div class="fixed-header" id="myHeader">
-    <div class="container text-center">
-        <h4 class="mb-2 fw-bold d-none d-md-block"><i class="fas fa-capsules me-2"></i>林新醫院藥品處方集</h4>
-        
-        <div class="mode-switch-container">
-            <button class="mode-btn active" id="btnModeDrug" onclick="switchMode('DRUG')">💊 藥品查詢</button>
-            <button class="mode-btn" id="btnModeFood" onclick="switchMode('FOOD')">🍎 食品/營養品</button>
-        </div>
+<div id="accessDenied">
+    <i class="fas fa-exclamation-triangle denied-icon"></i>
+    <div class="denied-text">請使用 LINE 開啟此頁面</div>
+    <div class="denied-sub">本系統僅限於林新醫院官方 LINE 帳號內使用</div>
+</div>
 
-        <div class="search-container">
-            <input type="text" id="searchInput" class="form-control shadow-sm" placeholder="輸入名稱、成分、代碼..." autocomplete="off" disabled>
+<div id="appContent" style="display:none;">
+
+    <div class="fixed-header" id="myHeader">
+        <div class="container text-center">
+            <h4 class="mb-2 fw-bold d-none d-md-block"><i class="fas fa-capsules me-2"></i>林新醫院藥品處方集</h4>
             
-            <div class="filter-container" id="drugFilters">
-                <button class="filter-btn active" onclick="setFilter('ALL', this)">全部</button>
-                <button class="filter-btn" onclick="setFilter('O', this)">口服 (O)</button>
-                <button class="filter-btn" onclick="setFilter('I', this)">針劑 (I)</button>
-                <button class="filter-btn" onclick="setFilter('E', this)">外用 (E)</button>
-                <button class="filter-btn" onclick="setFilter('P', this)">眼用 (P)</button>
-                <button class="filter-btn" onclick="setFilter('L', this)">水劑 (L)</button>
-                <button class="filter-btn" onclick="setFilter('J', this)">洗腎專用 (J)</button>
+            <div class="mode-switch-container">
+                <button class="mode-btn active" id="btnModeDrug" onclick="switchMode('DRUG')">💊 藥品查詢</button>
+                <button class="mode-btn" id="btnModeFood" onclick="switchMode('FOOD')">🍎 食品/營養品</button>
+            </div>
+
+            <div class="search-container">
+                <input type="text" id="searchInput" class="form-control shadow-sm" placeholder="輸入名稱、成分、代碼..." autocomplete="off" disabled>
+                
+                <div class="filter-container" id="drugFilters">
+                    <button class="filter-btn active" onclick="setFilter('ALL', this)">全部</button>
+                    <button class="filter-btn" onclick="setFilter('O', this)">口服 (O)</button>
+                    <button class="filter-btn" onclick="setFilter('I', this)">針劑 (I)</button>
+                    <button class="filter-btn" onclick="setFilter('E', this)">外用 (E)</button>
+                    <button class="filter-btn" onclick="setFilter('P', this)">眼用 (P)</button>
+                    <button class="filter-btn" onclick="setFilter('L', this)">水劑 (L)</button>
+                    <button class="filter-btn" onclick="setFilter('J', this)">洗腎專用 (J)</button>
+                </div>
             </div>
         </div>
     </div>
-</div>
 
-<div class="container mb-5" id="mainContainer">
-    <div class="d-flex justify-content-between align-items-center mb-3 px-2">
-        <span class="fw-bold text-primary" id="resultCount">資料庫連線中...</span>
+    <div class="container mb-5" id="mainContainer">
+        <div class="d-flex justify-content-between align-items-center mb-3 px-2">
+            <span class="fw-bold text-primary" id="resultCount">資料庫連線中...</span>
+        </div>
+        <div id="errorBox" class="alert alert-danger" style="display:none;"></div>
+        <div id="drugList" class="row g-4"></div>
     </div>
-    <div id="errorBox" class="alert alert-danger" style="display:none;"></div>
-    <div id="drugList" class="row g-4"></div>
+
 </div>
 
 <div class="modal fade" id="drugModal" tabindex="-1">
@@ -152,6 +179,27 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
 <script>
+    // --- LINE 瀏覽器檢查 (門神) ---
+    // 立即執行，檢查 User Agent 是否包含 "line" (不分大小寫)
+    (function checkLineBrowser() {
+        const ua = navigator.userAgent.toLowerCase();
+        const isLine = ua.indexOf('line') > -1;
+        
+        // 為了方便您測試，如果您想在電腦上也看得到，可以把下面這行註解打開：
+        // const isLine = true; // 強制放行測試用
+
+        if (isLine) {
+            // 是 LINE -> 顯示主程式，隱藏攔截畫面
+            document.getElementById('accessDenied').style.display = 'none';
+            document.getElementById('appContent').style.display = 'block';
+        } else {
+            // 不是 LINE -> 顯示攔截畫面 (預設就是顯示的，所以不用動)
+            // 這裡確保主程式是隱藏的
+            document.getElementById('appContent').style.display = 'none';
+            // 停止後續 script 執行 (非必要，但比較乾淨)
+        }
+    })();
+
     let drugList = [];     
     let foodList = [];     
     let currentMode = 'DRUG'; 
@@ -183,42 +231,28 @@
         header: true, 
         skipEmptyLines: true,
         transformHeader: function(h) {
-            // 自動移除 BOM 和空白
             return h.replace(/^\ufeff/, '').trim();
         },
         complete: function(results) {
             const excludePrefixes = ['X', 'F', 'N']; 
             
-            // --- 編碼/欄位偵測 ---
-            const fields = results.meta.fields || [];
-            // 檢查關鍵欄位是否存在
-            const hasCode = fields.includes('代碼') || fields.includes('院內代碼');
-            const hasName = fields.includes('名稱') || fields.includes('中文品名');
-
-            if (!hasCode && !hasName) {
-                const errorMsg = `⚠️ 讀取失敗！系統找不到「代碼」或「名稱」欄位。\n這通常是因為 Excel 存檔編碼錯誤 (變成了亂碼)。\n\n目前讀到的欄位看起來像這樣：\n[${fields.slice(0,3).join(', ')}...]\n\n👉 請重新打開 Excel，選擇「另存新檔」 > 檔案類型選「CSV UTF-8 (逗號分隔)」後重新上傳。`;
-                document.getElementById('errorBox').innerText = errorMsg;
-                document.getElementById('errorBox').style.display = 'block';
-                document.getElementById('resultCount').innerText = "資料讀取異常";
+            // 診斷：如果完全沒讀到資料
+            if (results.data.length === 0) {
+                document.getElementById('resultCount').innerText = "讀取到的資料為 0 筆";
                 return;
             }
 
             results.data.forEach(item => {
                 const pharmName = getValue(item, ['藥理分類名稱', '藥理分類']);
-                const code = getValue(item, ['代碼', '院內代碼']).toUpperCase();
+                const code = getValue(item, ['代碼', '院內代碼', '藥品代碼']).toUpperCase();
                 const name = getValue(item, ['名稱', '藥品名稱', '中文品名']);
                 const type = getValue(item, ['中西藥別', '藥別']);
 
-                // 0. 基本檢查
                 if (!name && !code) return;
-
-                // 1. 停用檢查
                 if (type === '停用') return;
 
-                // 2. 垃圾資料過濾
                 if (code.length > 0 && excludePrefixes.includes(code.charAt(0))) return; 
 
-                // 3. 分流
                 if (pharmName.includes('食品') || pharmName.includes('營養')) {
                     foodList.push(item);
                 } else {
@@ -226,13 +260,18 @@
                 }
             });
 
+            if (drugList.length === 0 && foodList.length === 0) {
+                const fields = results.meta.fields.join(", ");
+                const errorMsg = `警示：沒有符合條件的資料。讀到的欄位：[${fields}]`;
+                document.getElementById('errorBox').innerText = errorMsg;
+                document.getElementById('errorBox').style.display = 'block';
+            }
+
             document.getElementById('searchInput').disabled = false;
             switchMode('DRUG'); 
         },
         error: function(err) {
             document.getElementById('resultCount').innerText = "讀取失敗";
-            document.getElementById('errorBox').innerText = "無法讀取 CSV 檔案，請確認檔案名稱是否為 drugs.csv";
-            document.getElementById('errorBox').style.display = 'block';
         }
     });
 
