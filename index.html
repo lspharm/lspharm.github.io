@@ -8,7 +8,7 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
     <style>
-        /* 預留頂部空間 (稍微加高以容納下拉選單) */
+        /* 預留頂部空間 */
         body { background-color: #f0f2f5; font-family: "Microsoft JhengHei", "Heiti TC", Arial, sans-serif; padding-top: 240px; }
         
         /* --- 登入/攔截畫面樣式 --- */
@@ -127,6 +127,15 @@
         .empty-state { text-align: center; padding: 50px 20px; color: #6c757d; }
         .empty-state i { font-size: 4rem; margin-bottom: 20px; opacity: 0.5; }
         
+        /* 載入更多按鈕 */
+        .load-more-btn {
+            display: block; width: 100%; max-width: 300px; margin: 20px auto;
+            padding: 12px; border-radius: 25px; border: 2px solid #2a5298;
+            background: white; color: #2a5298; font-weight: bold;
+            transition: all 0.2s;
+        }
+        .load-more-btn:hover { background: #2a5298; color: white; }
+
         .filter-container::-webkit-scrollbar { height: 4px; }
         .filter-container::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.3); border-radius: 4px; }
     </style>
@@ -182,6 +191,7 @@
         </div>
         <div id="errorBox" class="alert alert-danger" style="display:none;"></div>
         <div id="drugList" class="row g-4"></div>
+        <div id="loadMoreContainer"></div> 
     </div>
 
 </div>
@@ -215,41 +225,42 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
 <script>
-    // --- 身分驗證與密碼邏輯 ---
     const CORRECT_PASSWORD = "70100";
+    const ITEMS_PER_PAGE = 20; 
+    let currentLimit = ITEMS_PER_PAGE;
+    let currentFilteredData = []; 
 
     function initAuth() {
-        const ua = navigator.userAgent.toLowerCase();
-        const isLine = ua.indexOf('line') > -1;
-        const urlParams = new URLSearchParams(window.location.search);
-        const source = urlParams.get('from');
+        try {
+            const ua = navigator.userAgent.toLowerCase();
+            const isLine = ua.indexOf('line') > -1;
+            const urlParams = new URLSearchParams(window.location.search);
+            const source = urlParams.get('from');
 
-        // 驗證來源是否為 linshin
-        const isFromCorrectGroup = (isLine && source === 'linshin');
+            const isFromCorrectGroup = (isLine && source === 'linshin');
 
-        if (isFromCorrectGroup) {
-            // 閱後即焚：清除網址參數
-            const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
-            window.history.replaceState({path: cleanUrl}, '', cleanUrl);
-            unlockApp();
-        } else {
-            if (isLine && source !== 'linshin') {
-                document.getElementById('loginReason').innerText = "請使用社群專屬連結或輸入密碼";
+            if (isFromCorrectGroup) {
+                try {
+                    const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
+                    window.history.replaceState({path: cleanUrl}, '', cleanUrl);
+                } catch(e) { }
+                unlockApp();
+            } else {
+                if (isLine && source !== 'linshin') {
+                    document.getElementById('loginReason').innerText = "請使用社群專屬連結或輸入密碼";
+                }
             }
-            setTimeout(() => document.getElementById('passInput').focus(), 500);
-        }
+        } catch (e) { console.error(e); }
     }
 
     function checkPassword() {
         const input = document.getElementById('passInput').value;
         const errorMsg = document.getElementById('loginError');
-        
         if (input === CORRECT_PASSWORD) {
             unlockApp();
         } else {
             errorMsg.style.display = 'block';
             document.getElementById('passInput').value = '';
-            document.getElementById('passInput').focus();
         }
     }
 
@@ -261,8 +272,6 @@
 
     initAuth();
 
-
-    // --- 主要程式邏輯 ---
     let drugList = [];     
     let foodList = [];     
     let currentMode = 'DRUG'; 
@@ -278,7 +287,6 @@
     }
     window.addEventListener('resize', adjustLayout);
 
-    // 容錯取值
     function getValue(item, keys) {
         if (!Array.isArray(keys)) keys = [keys];
         for (let key of keys) {
@@ -289,21 +297,16 @@
         return '';
     }
 
-    // --- 自動生成藥理分類選單 ---
     function populatePharmSelect(items) {
         const select = document.getElementById('pharmSelect');
-        const currentVal = select.value; // 記住現在選的值
-        
-        select.innerHTML = '<option value="">📂 依藥理分類篩選 (全部)</option>'; // 重置
-        
+        const currentVal = select.value;
+        select.innerHTML = '<option value="">📂 依藥理分類篩選 (全部)</option>';
         const pharmMap = new Map();
 
         items.forEach(item => {
             const id = getValue(item, ['藥理分類']);
             const name = getValue(item, ['藥理分類名稱']);
-            
             if (id && name) {
-                // 組合 ID 和名稱作為 Key 避免重複
                 const key = `${id} - ${name}`;
                 if (!pharmMap.has(key)) {
                     pharmMap.set(key, { id: id, name: name });
@@ -311,20 +314,16 @@
             }
         });
 
-        // 排序後加入選項
         const sortedKeys = Array.from(pharmMap.keys()).sort();
         sortedKeys.forEach(key => {
             const data = pharmMap.get(key);
             const option = document.createElement('option');
-            // 我們把 ID 當作 value 方便篩選，顯示則用完整名稱
             option.value = data.id; 
             option.text = `${data.id} ${data.name}`;
             select.appendChild(option);
         });
         
-        // 嘗試恢復之前的選擇 (如果切換模式後該分類還存在)
         if (currentVal) {
-             // 簡單檢查一下新清單有沒有這個 value，沒有就歸零
              const exists = Array.from(select.options).some(opt => opt.value === currentVal);
              if(exists) select.value = currentVal;
         }
@@ -334,9 +333,7 @@
         download: true, 
         header: true, 
         skipEmptyLines: true,
-        transformHeader: function(h) {
-            return h.replace(/^\ufeff/, '').trim();
-        },
+        transformHeader: function(h) { return h.replace(/^\ufeff/, '').trim(); },
         complete: function(results) {
             const excludePrefixes = ['X', 'F', 'N']; 
             
@@ -363,13 +360,6 @@
                 }
             });
 
-            if (drugList.length === 0 && foodList.length === 0) {
-                const fields = results.meta.fields.join(", ");
-                const errorMsg = `警示：沒有符合條件的資料。讀到的欄位：[${fields}]`;
-                document.getElementById('errorBox').innerText = errorMsg;
-                document.getElementById('errorBox').style.display = 'block';
-            }
-
             document.getElementById('searchInput').disabled = false;
             switchMode('DRUG'); 
         },
@@ -386,9 +376,7 @@
         document.getElementById('btnModeFood').classList.toggle('active', mode === 'FOOD');
 
         const filterDiv = document.getElementById('drugFilters');
-        const selectBox = document.getElementById('pharmSelect');
-
-        // 切換模式時，重新生成該模式的藥理分類選單
+        
         if (mode === 'DRUG') {
             filterDiv.style.display = 'flex';
             header.classList.remove('food-mode'); 
@@ -399,13 +387,11 @@
             populatePharmSelect(foodList);
         }
         
-        // 模式切換時，歸零篩選狀態，除非使用者只是在打字
-        selectBox.value = "";
+        document.getElementById('pharmSelect').value = "";
         currentCategory = 'ALL';
         document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
         if(document.querySelector('.filter-btn')) document.querySelector('.filter-btn').classList.add('active');
         
-        // 清空搜尋，回到初始畫面
         document.getElementById('searchInput').value = ''; 
         setTimeout(adjustLayout, 10);
         applyFilters();
@@ -425,8 +411,6 @@
         let targetList = (currentMode === 'DRUG') ? drugList : foodList;
         let result = targetList;
 
-        // 0. 初始狀態檢查：如果沒有搜尋關鍵字、沒有選藥理分類、也沒有選代碼分類
-        // 則顯示「請開始搜尋」的空白狀態
         if (!keyword && !pharmSelectVal && currentCategory === 'ALL') {
              document.getElementById('resultCount').innerText = "";
              document.getElementById('drugList').innerHTML = `
@@ -435,19 +419,17 @@
                     <h4>請輸入關鍵字或選擇分類開始查詢</h4>
                 </div>
              `;
+             document.getElementById('loadMoreContainer').innerHTML = ""; 
              return;
         }
 
-        // 1. 藥理分類篩選 (下拉選單)
         if (pharmSelectVal) {
             result = result.filter(item => {
                 const pId = getValue(item, ['藥理分類']).toLowerCase();
-                // 比對 ID 是否包含 (例如 A10B)
                 return pId.includes(pharmSelectVal);
             });
         }
 
-        // 2. 代碼前綴篩選 (按鈕)
         if (currentMode === 'DRUG' && currentCategory !== 'ALL') {
             result = result.filter(item => {
                 const code = getValue(item, ['代碼', '院內代碼']).toUpperCase();
@@ -455,7 +437,6 @@
             });
         }
 
-        // 3. 關鍵字搜尋
         if (keyword) {
             let scoredResults = result.map(item => {
                 let score = 0;
@@ -480,34 +461,45 @@
                 .map(x => x.item);
         }
 
-        const modeName = (currentMode === 'DRUG') ? '藥品' : '食品/營養品';
-        document.getElementById('resultCount').innerText = `${modeName}搜尋結果：共 ${result.length} 筆`;
-        renderDrugs(result.slice(0, 50));
+        currentLimit = ITEMS_PER_PAGE;
+        currentFilteredData = result; 
+        
+        renderDrugs(); 
         setTimeout(adjustLayout, 10);
     }
     
     document.getElementById('searchInput').addEventListener('input', applyFilters);
 
-    function renderDrugs(items) {
+    function loadMore() {
+        currentLimit += ITEMS_PER_PAGE;
+        renderDrugs();
+    }
+
+    function renderDrugs() {
         const container = document.getElementById('drugList');
+        const loadMoreContainer = document.getElementById('loadMoreContainer');
         container.innerHTML = '';
+        loadMoreContainer.innerHTML = ''; 
+
+        const totalItems = currentFilteredData.length;
+        const modeName = (currentMode === 'DRUG') ? '藥品' : '食品/營養品';
         
-        if (items.length === 0) {
+        if (totalItems === 0) {
+            document.getElementById('resultCount').innerText = `${modeName}搜尋結果：共 0 筆`;
             container.innerHTML = '<div class="col-12 text-center text-muted py-5">無符合資料</div>';
             return;
         }
 
-        items.forEach((item) => {
+        const itemsToShow = currentFilteredData.slice(0, currentLimit);
+        document.getElementById('resultCount').innerText = `${modeName}搜尋：顯示前 ${itemsToShow.length} 筆 (共 ${totalItems} 筆)`;
+
+        itemsToShow.forEach((item) => {
             const name = getValue(item, ['名稱', '藥品名稱']);
             const chineseName = getValue(item, ['中文品名', '中文名稱']);
             const code = getValue(item, ['代碼', '院內代碼']);
             const ingredient = getValue(item, ['主要成份', '成份']);
             const pharmClass = getValue(item, ['藥理分類名稱', '藥理分類']);
             const indication = getValue(item, ['適應症', '適應症(中文)']);
-            const dosage = getValue(item, ['劑量及用法', '用法用量']);
-            const howToStore = getValue(item, ['藥品該如何存放']);
-            const nhiRule = getValue(item, ['臨床用途(中文)']);
-            const action = getValue(item, ['作用']);
             const warning = getValue(item, ['注意事項1', '注意事項', '藥品警語(中文)']);
             const storageLoc = getValue(item, ['儲存方式']);
             const nhiCode = getValue(item, ['健保碼']);
@@ -533,11 +525,7 @@
 
                         ${ingredient ? `<div class="block-ingredient"><span class="block-label"><i class="fas fa-flask me-1"></i>主要成份</span><div class="block-content">${ingredient}</div></div>` : ''}
                         ${indication ? `<div class="block-indication"><span class="block-label"><i class="fas fa-stethoscope me-1"></i>適應症</span><div class="block-content">${indication}</div></div>` : ''}
-                        ${dosage ? `<div class="block-usage"><span class="block-label"><i class="fas fa-clock me-1"></i>用法</span><div class="block-content">${dosage}</div></div>` : ''}
-                        ${howToStore ? `<div class="block-storage"><span class="block-label"><i class="fas fa-temperature-low me-1"></i>存放</span><div class="block-content">${howToStore}</div></div>` : ''}
                         
-                        ${nhiRule ? `<div class="info-row mt-2"><span class="info-label text-nhi">健保規範:</span><span class="text-content text-nhi">${nhiRule}</span></div>` : ''}
-                        ${action ? `<div class="info-row mt-2"><span class="info-label">作用:</span><span class="text-content text-muted">${action}</span></div>` : ''}
                         ${warning ? `<div class="mt-2 p-2 bg-light border rounded small text-danger text-content"><i class="fas fa-exclamation-circle me-1"></i>${warning}</div>` : ''}
                             
                         ${storageLoc ? `<div class="divider"></div><div class="text-end text-muted small">儲位: ${storageLoc}</div>` : ''}
@@ -546,6 +534,14 @@
             `;
             container.appendChild(col);
         });
+
+        if (totalItems > currentLimit) {
+            const btn = document.createElement('button');
+            btn.className = 'load-more-btn';
+            btn.innerText = `⬇️ 顯示更多資料 (還有 ${totalItems - currentLimit} 筆)`;
+            btn.onclick = loadMore;
+            loadMoreContainer.appendChild(btn);
+        }
     }
 
     window.openDetail = function(item) {
