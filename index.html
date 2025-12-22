@@ -11,7 +11,7 @@
         /* 預留頂部空間 */
         body { background-color: #f0f2f5; font-family: "Microsoft JhengHei", "Heiti TC", Arial, sans-serif; padding-top: 190px; }
         
-        /* 固定置頂區域 */
+        /* 固定置頂區域 - 預設藍色 (藥品) */
         .fixed-header {
             position: fixed; top: 0; left: 0; width: 100%; z-index: 1000;
             background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
@@ -167,7 +167,7 @@
     }
     window.addEventListener('resize', adjustLayout);
 
-    // --- 關鍵修改：容錯取值 ---
+    // 容錯取值
     function getValue(item, keys) {
         if (!Array.isArray(keys)) keys = [keys];
         for (let key of keys) {
@@ -182,35 +182,43 @@
         download: true, 
         header: true, 
         skipEmptyLines: true,
-        // 強制處理檔頭：去空白、去 BOM
         transformHeader: function(h) {
+            // 自動移除 BOM 和空白
             return h.replace(/^\ufeff/, '').trim();
         },
         complete: function(results) {
             const excludePrefixes = ['X', 'F', 'N']; 
             
-            // 診斷：如果完全沒讀到資料，顯示欄位名稱
-            if (results.data.length === 0) {
-                document.getElementById('resultCount').innerText = "讀取到的資料為 0 筆";
+            // --- 編碼/欄位偵測 ---
+            const fields = results.meta.fields || [];
+            // 檢查關鍵欄位是否存在
+            const hasCode = fields.includes('代碼') || fields.includes('院內代碼');
+            const hasName = fields.includes('名稱') || fields.includes('中文品名');
+
+            if (!hasCode && !hasName) {
+                const errorMsg = `⚠️ 讀取失敗！系統找不到「代碼」或「名稱」欄位。\n這通常是因為 Excel 存檔編碼錯誤 (變成了亂碼)。\n\n目前讀到的欄位看起來像這樣：\n[${fields.slice(0,3).join(', ')}...]\n\n👉 請重新打開 Excel，選擇「另存新檔」 > 檔案類型選「CSV UTF-8 (逗號分隔)」後重新上傳。`;
+                document.getElementById('errorBox').innerText = errorMsg;
+                document.getElementById('errorBox').style.display = 'block';
+                document.getElementById('resultCount').innerText = "資料讀取異常";
                 return;
             }
 
             results.data.forEach(item => {
                 const pharmName = getValue(item, ['藥理分類名稱', '藥理分類']);
-                const code = getValue(item, ['代碼', '院內代碼', '藥品代碼']).toUpperCase();
+                const code = getValue(item, ['代碼', '院內代碼']).toUpperCase();
                 const name = getValue(item, ['名稱', '藥品名稱', '中文品名']);
-                const type = getValue(item, ['中西藥別', '藥別']); // 支援「中西藥別」或「藥別」
+                const type = getValue(item, ['中西藥別', '藥別']);
 
-                // 0. 基本檢查：沒有名稱也沒有代碼，視為空行
+                // 0. 基本檢查
                 if (!name && !code) return;
 
-                // 1. 停用檢查：只要是"停用"，直接再見
+                // 1. 停用檢查
                 if (type === '停用') return;
 
-                // 2. 嚴格過濾垃圾資料 (X, F, N 開頭)
+                // 2. 垃圾資料過濾
                 if (code.length > 0 && excludePrefixes.includes(code.charAt(0))) return; 
 
-                // 3. 分流：藥品 vs 食品
+                // 3. 分流
                 if (pharmName.includes('食品') || pharmName.includes('營養')) {
                     foodList.push(item);
                 } else {
@@ -218,19 +226,13 @@
                 }
             });
 
-            // 診斷：如果分流後兩邊都沒資料
-            if (drugList.length === 0 && foodList.length === 0) {
-                const fields = results.meta.fields.join(", ");
-                const errorMsg = `警示：雖然讀取到檔案，但沒有符合條件的藥品。可能是欄位名稱對不上。\n目前讀到的欄位有：[${fields}]`;
-                document.getElementById('errorBox').innerText = errorMsg;
-                document.getElementById('errorBox').style.display = 'block';
-            }
-
             document.getElementById('searchInput').disabled = false;
             switchMode('DRUG'); 
         },
         error: function(err) {
-            document.getElementById('resultCount').innerText = "讀取失敗，請確認 drugs.csv 檔案存在且格式正確 (建議另存為 CSV UTF-8)";
+            document.getElementById('resultCount').innerText = "讀取失敗";
+            document.getElementById('errorBox').innerText = "無法讀取 CSV 檔案，請確認檔案名稱是否為 drugs.csv";
+            document.getElementById('errorBox').style.display = 'block';
         }
     });
 
