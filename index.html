@@ -16,22 +16,18 @@
             position: fixed; top: 0; left: 0; width: 100%; z-index: 1000;
             background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
             color: white; padding: 15px 0 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            transition: background 0.5s ease; /* 增加顏色轉換的過渡動畫 */
+            transition: background 0.5s ease;
         }
 
-        /* 3. 新增黃色樣式 (食品模式專用) */
+        /* 食品模式專用黃色樣式 */
         .fixed-header.food-mode {
-            /* 使用黃橘色漸層，代表食品/活力 */
             background: linear-gradient(135deg, #FFC107 0%, #FF9800 100%);
-            color: #333; /* 背景變亮，文字要變深才看得到 */
+            color: #333;
         }
-
-        /* 調整食品模式下的按鈕顏色，讓它在黃底上清楚 */
         .fixed-header.food-mode .mode-btn { color: rgba(0,0,0,0.6); }
         .fixed-header.food-mode .mode-btn.active { background: white; color: #d35400; }
         .fixed-header.food-mode .filter-btn { border-color: rgba(0,0,0,0.2); background: rgba(0,0,0,0.05); color: #333; }
         .fixed-header.food-mode .filter-btn.active { background: #333; color: #FFC107; border-color: #333; }
-
 
         /* 模式切換按鈕 */
         .mode-switch-container {
@@ -133,7 +129,10 @@
             <div class="modal-header">
                 <div class="w-100">
                     <div class="d-flex justify-content-between align-items-start">
-                        <span class="badge badge-code mb-1" id="modalCode">Code</span>
+                        <div>
+                            <span class="badge badge-code mb-1" id="modalCode">Code</span>
+                            <span class="badge bg-secondary mb-1" id="modalNhiCode" style="display:none;">健保碼</span>
+                        </div>
                         <span class="badge bg-info text-dark" id="modalClass">藥理分類</span>
                     </div>
                     <h3 class="modal-title fw-bold mt-2" id="modalTitle">藥品名稱</h3>
@@ -183,7 +182,7 @@
                     return; 
                 }
 
-                // 2. 分流
+                // 2. 分流：藥品 vs 食品
                 if (pharmName.includes('食品') || pharmName.includes('營養')) {
                     foodList.push(item);
                 } else {
@@ -204,7 +203,7 @@
         currentMode = mode;
         const header = document.getElementById('myHeader');
         
-        // 切換按鈕樣式
+        // 切換按鈕與背景
         document.getElementById('btnModeDrug').classList.toggle('active', mode === 'DRUG');
         document.getElementById('btnModeFood').classList.toggle('active', mode === 'FOOD');
 
@@ -212,12 +211,10 @@
         
         if (mode === 'DRUG') {
             filterDiv.style.display = 'flex';
-            // 移除黃色模式，變回藍色
-            header.classList.remove('food-mode');
+            header.classList.remove('food-mode'); // 藍色
         } else {
             filterDiv.style.display = 'none';
-            // 加入黃色模式
-            header.classList.add('food-mode');
+            header.classList.add('food-mode'); // 黃色
         }
 
         currentCategory = 'ALL';
@@ -239,6 +236,7 @@
     function applyFilters() {
         const keyword = document.getElementById('searchInput').value.toLowerCase().trim();
         
+        // 1. 決定要搜哪個清單
         let targetList = (currentMode === 'DRUG') ? drugList : foodList;
         let result = targetList;
 
@@ -252,10 +250,12 @@
         if (keyword) {
             let scoredResults = result.map(item => {
                 let score = 0;
-                const name = (item['名稱'] || item['藥品名稱'] || Object.values(item)[1] || '').toLowerCase();
+                // 更新：對應新CSV的欄位名稱
+                const name = (item['名稱'] || item['藥品名稱'] || '').toLowerCase();
                 const ingr = (item['主要成份'] || '').toLowerCase();
-                const code = (item['代碼'] || item['院內代碼'] || Object.values(item)[0] || '').toLowerCase();
+                const code = (item['代碼'] || item['院內代碼'] || '').toLowerCase();
 
+                // 權重規則
                 if (name.includes(keyword) || ingr.includes(keyword)) score = 10;
                 else if (code.includes(keyword)) score = 5;
                 else if (Object.values(item).some(val => String(val).toLowerCase().includes(keyword))) score = 1;
@@ -288,8 +288,9 @@
 
         items.forEach((item) => {
             const getStr = (key) => (item[key] || '').trim();
-            const name = item['名稱'] || item['藥品名稱'] || Object.values(item)[1];
-            const code = item['代碼'] || item['院內代碼'] || Object.values(item)[0];
+            // 對應 CSV 欄位
+            const name = item['名稱'] || item['藥品名稱'] || '';
+            const code = item['代碼'] || item['院內代碼'] || '';
 
             const col = document.createElement('div');
             col.className = 'col-lg-4 col-md-6 col-sm-12';
@@ -312,7 +313,8 @@
                         
                         ${getStr('臨床用途(中文)') ? `<div class="info-row mt-2"><span class="info-label text-nhi">健保規範:</span><span class="text-content text-nhi">${getStr('臨床用途(中文)')}</span></div>` : ''}
                         ${getStr('作用') ? `<div class="info-row mt-2"><span class="info-label">作用:</span><span class="text-content text-muted">${getStr('作用')}</span></div>` : ''}
-                        ${getStr('注意事項1') ? `<div class="mt-2 p-2 bg-light border rounded small text-danger text-content"><i class="fas fa-exclamation-circle me-1"></i>${getStr('注意事項1')}</div>` : ''}
+                        
+                        ${(getStr('注意事項1') || getStr('注意事項')) ? `<div class="mt-2 p-2 bg-light border rounded small text-danger text-content"><i class="fas fa-exclamation-circle me-1"></i>${getStr('注意事項1') || getStr('注意事項')}</div>` : ''}
                             
                         ${getStr('儲存方式') ? `<div class="divider"></div><div class="text-end text-muted small">儲位: ${getStr('儲存方式')}</div>` : ''}
                     </div>
@@ -329,6 +331,16 @@
         document.getElementById('modalIngr').innerText = getStr('主要成份');
         document.getElementById('modalClass').innerText = getStr('藥理分類名稱') || '未分類';
         
+        // 顯示健保碼 (如果有)
+        const nhiCode = getStr('健保碼');
+        const badgeNhi = document.getElementById('modalNhiCode');
+        if(nhiCode && nhiCode !== '0') {
+            badgeNhi.innerText = `健保碼: ${nhiCode}`;
+            badgeNhi.style.display = 'inline-block';
+        } else {
+            badgeNhi.style.display = 'none';
+        }
+        
         let html = '';
         if (getStr('主要成份')) html += `<div class="block-ingredient"><span class="block-label"><i class="fas fa-flask me-1"></i>主要成份</span><div class="block-content">${getStr('主要成份')}</div></div>`;
         if (getStr('適應症')) html += `<div class="block-indication"><span class="block-label"><i class="fas fa-stethoscope me-1"></i>適應症</span><div class="block-content">${getStr('適應症')}</div></div>`;
@@ -337,7 +349,10 @@
 
         if (getStr('臨床用途(中文)')) html += `<div class="detail-title"><i class="fas fa-file-invoice-dollar me-2"></i>健保給付規範</div><div class="detail-content text-content text-nhi">${getStr('臨床用途(中文)')}</div>`;
         if (getStr('作用')) html += `<div class="detail-title"><i class="fas fa-bolt me-2"></i>作用</div><div class="detail-content text-content">${getStr('作用')}</div>`;
-        if (getStr('注意事項1')) html += `<div class="detail-title text-danger"><i class="fas fa-exclamation-triangle me-2"></i>注意事項</div><div class="alert-box text-content">${getStr('注意事項1')}</div>`;
+        
+        const warning = getStr('注意事項1') || getStr('注意事項');
+        if (warning) html += `<div class="detail-title text-danger"><i class="fas fa-exclamation-triangle me-2"></i>注意事項</div><div class="alert-box text-content">${warning}</div>`;
+        
         if (getStr('儲存方式')) html += `<div class="mt-4 text-end text-muted border-top pt-2">倉庫/藥局儲位：${getStr('儲存方式')}</div>`;
 
         document.getElementById('modalBody').innerHTML = html;
