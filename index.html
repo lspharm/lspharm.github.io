@@ -123,7 +123,7 @@
     <div class="login-box">
         <i class="fas fa-lock login-icon"></i>
         <div class="login-title">林新醫院處方集</div>
-        <div class="login-sub">非 LINE 瀏覽器請輸入密碼訪問</div>
+        <div class="login-sub" id="loginReason">系統管制區，請輸入密碼</div>
         
         <input type="password" id="passInput" class="login-input" placeholder="請輸入密碼" onkeyup="if(event.keyCode===13) checkPassword()">
         <button class="login-btn" onclick="checkPassword()">確認</button>
@@ -201,16 +201,27 @@
     const CORRECT_PASSWORD = "70100";
 
     function initAuth() {
+        // 1. 取得瀏覽器 User Agent
         const ua = navigator.userAgent.toLowerCase();
         const isLine = ua.indexOf('line') > -1;
-        
-        // 如果是 LINE 瀏覽器，直接放行
-        // (開發測試用：解除下行註解可強制在電腦上預覽)
-        // const isLine = true; 
 
-        if (isLine) {
+        // 2. 取得網址參數 (?from=...)
+        const urlParams = new URLSearchParams(window.location.search);
+        const source = urlParams.get('from');
+
+        // === 核心驗證邏輯 ===
+        // 必須同時滿足：(1) 是 LINE 瀏覽器 AND (2) 網址帶有正確的來源參數
+        const isFromCorrectGroup = (isLine && source === 'huizhong');
+
+        if (isFromCorrectGroup) {
+            // 符合條件 -> 自動解鎖
             unlockApp();
         } else {
+            // 不符合條件 -> 顯示密碼框
+            // 可以根據情況顯示不同訊息 (選用)
+            if (isLine && source !== 'huizhong') {
+                document.getElementById('loginReason').innerText = "請使用社群專屬連結或輸入密碼";
+            }
             setTimeout(() => document.getElementById('passInput').focus(), 500);
         }
     }
@@ -365,24 +376,17 @@
                 const ingr = getValue(item, ['主要成份', '成份']).toLowerCase();
                 const code = getValue(item, ['代碼', '院內代碼']).toLowerCase();
 
-                // 權重分配：
-                // 1. 成分 (最高)
-                // 2. 英文名稱
-                // 3. 中文名稱
-                // 4. 代碼
-                
+                // 權重分配
                 if (ingr.includes(keyword)) score += 100;
                 if (name.includes(keyword)) score += 80;
                 if (chineseName.includes(keyword)) score += 60;
                 if (code.includes(keyword)) score += 40;
                 
-                // 其他欄位模糊搜尋
                 if (Object.values(item).some(val => String(val).toLowerCase().includes(keyword))) score += 1;
 
                 return { item, score };
             });
 
-            // 過濾並排序
             result = scoredResults
                 .filter(x => x.score > 0)
                 .sort((a, b) => b.score - a.score)
@@ -408,7 +412,7 @@
 
         items.forEach((item) => {
             const name = getValue(item, ['名稱', '藥品名稱']);
-            const chineseName = getValue(item, ['中文品名', '中文名稱']); // 取得中文名稱
+            const chineseName = getValue(item, ['中文品名', '中文名稱']); // 中文名稱
             const code = getValue(item, ['代碼', '院內代碼']);
             const ingredient = getValue(item, ['主要成份', '成份']);
             const pharmClass = getValue(item, ['藥理分類名稱', '藥理分類']);
@@ -473,7 +477,7 @@
         const nhiCode = getValue(item, ['健保碼']);
 
         document.getElementById('modalTitle').innerText = name;
-        document.getElementById('modalChineseTitle').innerText = chineseName || ''; // 詳情頁也顯示中文名
+        document.getElementById('modalChineseTitle').innerText = chineseName || '';
         document.getElementById('modalCode').innerText = code;
         document.getElementById('modalIngr').innerText = ingredient;
         document.getElementById('modalClass').innerText = pharmClass || '未分類';
