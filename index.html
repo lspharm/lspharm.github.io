@@ -11,22 +11,37 @@
         /* 預留頂部空間 */
         body { background-color: #f0f2f5; font-family: "Microsoft JhengHei", "Heiti TC", Arial, sans-serif; padding-top: 190px; }
         
-        /* --- 攔截畫面樣式 --- */
-        #accessDenied {
+        /* --- 登入/攔截畫面樣式 --- */
+        #loginScreen {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
-            background: #fff;
-            z-index: 9999; /* 最高層級，蓋住所有內容 */
-            display: flex;
+            background: #f8f9fa;
+            z-index: 9999; /* 最高層級 */
+            display: flex; /* 預設開啟，JS判斷後隱藏 */
             flex-direction: column;
             align-items: center;
             justify-content: center;
             text-align: center;
             padding: 20px;
         }
-        .denied-icon { font-size: 4rem; color: #dc3545; margin-bottom: 20px; }
-        .denied-text { font-size: 1.5rem; font-weight: bold; color: #333; }
-        .denied-sub { color: #666; margin-top: 10px; }
+        .login-box {
+            background: white; padding: 30px; border-radius: 15px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            max-width: 400px; width: 100%;
+        }
+        .login-icon { font-size: 3rem; color: #1e3c72; margin-bottom: 15px; }
+        .login-title { font-size: 1.5rem; font-weight: bold; color: #333; margin-bottom: 5px; }
+        .login-sub { color: #666; font-size: 0.9rem; margin-bottom: 20px; }
+        .login-input { 
+            width: 100%; padding: 10px; margin-bottom: 15px; 
+            border: 2px solid #e9ecef; border-radius: 8px; text-align: center; font-size: 1.2rem; 
+        }
+        .login-btn { 
+            width: 100%; padding: 10px; background: #1e3c72; color: white; 
+            border: none; border-radius: 8px; font-weight: bold; font-size: 1rem; cursor: pointer; 
+        }
+        .login-btn:hover { background: #152b55; }
+        .error-msg { color: #dc3545; font-size: 0.9rem; margin-top: 10px; display: none; }
 
         /* 固定置頂區域 */
         .fixed-header {
@@ -108,10 +123,16 @@
 </head>
 <body>
 
-<div id="accessDenied">
-    <i class="fas fa-exclamation-triangle denied-icon"></i>
-    <div class="denied-text">請使用 LINE 開啟此頁面</div>
-    <div class="denied-sub">本系統僅限於林新醫院官方 LINE 帳號內使用</div>
+<div id="loginScreen">
+    <div class="login-box">
+        <i class="fas fa-lock login-icon"></i>
+        <div class="login-title">林新醫院處方集</div>
+        <div class="login-sub">非 LINE 瀏覽器請輸入密碼訪問</div>
+        
+        <input type="password" id="passInput" class="login-input" placeholder="請輸入密碼" onkeyup="if(event.keyCode===13) checkPassword()">
+        <button class="login-btn" onclick="checkPassword()">確認</button>
+        <div class="error-msg" id="loginError">密碼錯誤，請重新輸入</div>
+    </div>
 </div>
 
 <div id="appContent" style="display:none;">
@@ -179,27 +200,49 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
 <script>
-    // --- LINE 瀏覽器檢查 (門神) ---
-    // 立即執行，檢查 User Agent 是否包含 "line" (不分大小寫)
-    (function checkLineBrowser() {
+    // --- 身分驗證與密碼邏輯 ---
+    const CORRECT_PASSWORD = "70100";
+
+    function initAuth() {
         const ua = navigator.userAgent.toLowerCase();
         const isLine = ua.indexOf('line') > -1;
         
-        // 為了方便您測試，如果您想在電腦上也看得到，可以把下面這行註解打開：
-        // const isLine = true; // 強制放行測試用
-
+        // 如果是 LINE 瀏覽器，直接放行
         if (isLine) {
-            // 是 LINE -> 顯示主程式，隱藏攔截畫面
-            document.getElementById('accessDenied').style.display = 'none';
-            document.getElementById('appContent').style.display = 'block';
+            unlockApp();
         } else {
-            // 不是 LINE -> 顯示攔截畫面 (預設就是顯示的，所以不用動)
-            // 這裡確保主程式是隱藏的
-            document.getElementById('appContent').style.display = 'none';
-            // 停止後續 script 執行 (非必要，但比較乾淨)
+            // 否則顯示登入畫面 (預設就是顯示的)
+            // 聚焦在輸入框
+            setTimeout(() => document.getElementById('passInput').focus(), 500);
         }
-    })();
+    }
 
+    function checkPassword() {
+        const input = document.getElementById('passInput').value;
+        const errorMsg = document.getElementById('loginError');
+        
+        if (input === CORRECT_PASSWORD) {
+            unlockApp();
+        } else {
+            errorMsg.style.display = 'block';
+            document.getElementById('passInput').value = '';
+            document.getElementById('passInput').focus();
+        }
+    }
+
+    function unlockApp() {
+        document.getElementById('loginScreen').style.display = 'none';
+        document.getElementById('appContent').style.display = 'block';
+        
+        // 解鎖後重新計算一下版面，確保置頂功能正常
+        setTimeout(adjustLayout, 100);
+    }
+
+    // 啟動驗證
+    initAuth();
+
+
+    // --- 以下為主要應用程式邏輯 ---
     let drugList = [];     
     let foodList = [];     
     let currentMode = 'DRUG'; 
