@@ -8,8 +8,8 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
     <style>
-        /* 預留頂部空間 */
-        body { background-color: #f0f2f5; font-family: "Microsoft JhengHei", "Heiti TC", Arial, sans-serif; padding-top: 190px; }
+        /* 預留頂部空間 (稍微加高以容納下拉選單) */
+        body { background-color: #f0f2f5; font-family: "Microsoft JhengHei", "Heiti TC", Arial, sans-serif; padding-top: 240px; }
         
         /* --- 登入/攔截畫面樣式 --- */
         #loginScreen {
@@ -56,7 +56,7 @@
 
         /* 模式切換按鈕 */
         .mode-switch-container {
-            display: flex; justify-content: center; margin-bottom: 12px;
+            display: flex; justify-content: center; margin-bottom: 8px;
             background: rgba(0,0,0,0.2); padding: 4px; border-radius: 25px;
             width: fit-content; margin-left: auto; margin-right: auto;
         }
@@ -68,6 +68,16 @@
         
         /* 搜尋與篩選 */
         .search-container { max-width: 700px; margin: 0 auto; padding: 0 15px; }
+        
+        /* 藥理分類下拉選單 */
+        .pharm-select {
+            width: 100%; padding: 8px 12px; margin-top: 8px;
+            border-radius: 8px; border: 1px solid rgba(255,255,255,0.5);
+            background-color: rgba(255,255,255,0.9); color: #333; font-size: 0.95rem;
+            text-overflow: ellipsis; white-space: nowrap; overflow: hidden;
+        }
+        .pharm-select:focus { outline: none; border-color: #fff; box-shadow: 0 0 0 2px rgba(255,255,255,0.5); }
+
         .filter-container { 
             display: flex; gap: 8px; overflow-x: auto; padding-bottom: 5px; margin-top: 10px; 
             justify-content: flex-start; -webkit-overflow-scrolling: touch; 
@@ -113,6 +123,10 @@
         .detail-content { background: #fff; padding: 10px; border-radius: 6px; }
         .alert-box { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; padding: 15px; border-radius: 8px; }
         
+        /* 初始提示區塊 */
+        .empty-state { text-align: center; padding: 50px 20px; color: #6c757d; }
+        .empty-state i { font-size: 4rem; margin-bottom: 20px; opacity: 0.5; }
+        
         .filter-container::-webkit-scrollbar { height: 4px; }
         .filter-container::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.3); border-radius: 4px; }
     </style>
@@ -145,6 +159,10 @@
             <div class="search-container">
                 <input type="text" id="searchInput" class="form-control shadow-sm" placeholder="輸入名稱、成分、代碼..." autocomplete="off" disabled>
                 
+                <select id="pharmSelect" class="pharm-select" onchange="applyFilters()">
+                    <option value="">📂 依藥理分類篩選 (全部)</option>
+                </select>
+
                 <div class="filter-container" id="drugFilters">
                     <button class="filter-btn active" onclick="setFilter('ALL', this)">全部</button>
                     <button class="filter-btn" onclick="setFilter('O', this)">口服 (O)</button>
@@ -160,7 +178,7 @@
 
     <div class="container mb-5" id="mainContainer">
         <div class="d-flex justify-content-between align-items-center mb-3 px-2">
-            <span class="fw-bold text-primary" id="resultCount">資料庫連線中...</span>
+            <span class="fw-bold text-primary" id="resultCount"></span>
         </div>
         <div id="errorBox" class="alert alert-danger" style="display:none;"></div>
         <div id="drugList" class="row g-4"></div>
@@ -206,16 +224,13 @@
         const urlParams = new URLSearchParams(window.location.search);
         const source = urlParams.get('from');
 
-        // 核心驗證：是 LINE 且 來源正確
+        // 驗證來源是否為 linshin
         const isFromCorrectGroup = (isLine && source === 'linshin');
 
         if (isFromCorrectGroup) {
-            // === 關鍵技術：閱後即焚 ===
-            // 解鎖前，先用 JS 把網址列的參數清空
-            // 這樣如果使用者去按「複製連結」，複製到的會是沒有密碼的網址
+            // 閱後即焚：清除網址參數
             const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
             window.history.replaceState({path: cleanUrl}, '', cleanUrl);
-
             unlockApp();
         } else {
             if (isLine && source !== 'linshin') {
@@ -274,6 +289,47 @@
         return '';
     }
 
+    // --- 自動生成藥理分類選單 ---
+    function populatePharmSelect(items) {
+        const select = document.getElementById('pharmSelect');
+        const currentVal = select.value; // 記住現在選的值
+        
+        select.innerHTML = '<option value="">📂 依藥理分類篩選 (全部)</option>'; // 重置
+        
+        const pharmMap = new Map();
+
+        items.forEach(item => {
+            const id = getValue(item, ['藥理分類']);
+            const name = getValue(item, ['藥理分類名稱']);
+            
+            if (id && name) {
+                // 組合 ID 和名稱作為 Key 避免重複
+                const key = `${id} - ${name}`;
+                if (!pharmMap.has(key)) {
+                    pharmMap.set(key, { id: id, name: name });
+                }
+            }
+        });
+
+        // 排序後加入選項
+        const sortedKeys = Array.from(pharmMap.keys()).sort();
+        sortedKeys.forEach(key => {
+            const data = pharmMap.get(key);
+            const option = document.createElement('option');
+            // 我們把 ID 當作 value 方便篩選，顯示則用完整名稱
+            option.value = data.id; 
+            option.text = `${data.id} ${data.name}`;
+            select.appendChild(option);
+        });
+        
+        // 嘗試恢復之前的選擇 (如果切換模式後該分類還存在)
+        if (currentVal) {
+             // 簡單檢查一下新清單有沒有這個 value，沒有就歸零
+             const exists = Array.from(select.options).some(opt => opt.value === currentVal);
+             if(exists) select.value = currentVal;
+        }
+    }
+
     Papa.parse(csvFileName, {
         download: true, 
         header: true, 
@@ -296,7 +352,7 @@
                 const type = getValue(item, ['中西藥別', '藥別']);
 
                 if (!name && !code) return;
-                if (type === '停用') return;
+                if (type === '停用') return; 
 
                 if (code.length > 0 && excludePrefixes.includes(code.charAt(0))) return; 
 
@@ -330,18 +386,26 @@
         document.getElementById('btnModeFood').classList.toggle('active', mode === 'FOOD');
 
         const filterDiv = document.getElementById('drugFilters');
+        const selectBox = document.getElementById('pharmSelect');
+
+        // 切換模式時，重新生成該模式的藥理分類選單
         if (mode === 'DRUG') {
             filterDiv.style.display = 'flex';
             header.classList.remove('food-mode'); 
+            populatePharmSelect(drugList);
         } else {
             filterDiv.style.display = 'none';
             header.classList.add('food-mode'); 
+            populatePharmSelect(foodList);
         }
-
+        
+        // 模式切換時，歸零篩選狀態，除非使用者只是在打字
+        selectBox.value = "";
         currentCategory = 'ALL';
         document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
         if(document.querySelector('.filter-btn')) document.querySelector('.filter-btn').classList.add('active');
         
+        // 清空搜尋，回到初始畫面
         document.getElementById('searchInput').value = ''; 
         setTimeout(adjustLayout, 10);
         applyFilters();
@@ -356,9 +420,34 @@
 
     function applyFilters() {
         const keyword = document.getElementById('searchInput').value.toLowerCase().trim();
+        const pharmSelectVal = document.getElementById('pharmSelect').value.toLowerCase().trim();
+        
         let targetList = (currentMode === 'DRUG') ? drugList : foodList;
         let result = targetList;
 
+        // 0. 初始狀態檢查：如果沒有搜尋關鍵字、沒有選藥理分類、也沒有選代碼分類
+        // 則顯示「請開始搜尋」的空白狀態
+        if (!keyword && !pharmSelectVal && currentCategory === 'ALL') {
+             document.getElementById('resultCount').innerText = "";
+             document.getElementById('drugList').innerHTML = `
+                <div class="col-12 empty-state">
+                    <i class="fas fa-search"></i>
+                    <h4>請輸入關鍵字或選擇分類開始查詢</h4>
+                </div>
+             `;
+             return;
+        }
+
+        // 1. 藥理分類篩選 (下拉選單)
+        if (pharmSelectVal) {
+            result = result.filter(item => {
+                const pId = getValue(item, ['藥理分類']).toLowerCase();
+                // 比對 ID 是否包含 (例如 A10B)
+                return pId.includes(pharmSelectVal);
+            });
+        }
+
+        // 2. 代碼前綴篩選 (按鈕)
         if (currentMode === 'DRUG' && currentCategory !== 'ALL') {
             result = result.filter(item => {
                 const code = getValue(item, ['代碼', '院內代碼']).toUpperCase();
@@ -366,6 +455,7 @@
             });
         }
 
+        // 3. 關鍵字搜尋
         if (keyword) {
             let scoredResults = result.map(item => {
                 let score = 0;
