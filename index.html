@@ -209,17 +209,16 @@
         const urlParams = new URLSearchParams(window.location.search);
         const source = urlParams.get('from');
 
-        // === 核心驗證邏輯 ===
+        // === 核心驗證邏輯：改為 linshin ===
         // 必須同時滿足：(1) 是 LINE 瀏覽器 AND (2) 網址帶有正確的來源參數
-        const isFromCorrectGroup = (isLine && source === 'huizhong');
+        const isFromCorrectGroup = (isLine && source === 'linshin');
 
         if (isFromCorrectGroup) {
             // 符合條件 -> 自動解鎖
             unlockApp();
         } else {
             // 不符合條件 -> 顯示密碼框
-            // 可以根據情況顯示不同訊息 (選用)
-            if (isLine && source !== 'huizhong') {
+            if (isLine && source !== 'linshin') {
                 document.getElementById('loginReason').innerText = "請使用社群專屬連結或輸入密碼";
             }
             setTimeout(() => document.getElementById('passInput').focus(), 500);
@@ -368,7 +367,6 @@
         }
 
         if (keyword) {
-            // === 搜尋排序邏輯優化 ===
             let scoredResults = result.map(item => {
                 let score = 0;
                 const name = getValue(item, ['名稱', '藥品名稱']).toLowerCase();
@@ -412,7 +410,7 @@
 
         items.forEach((item) => {
             const name = getValue(item, ['名稱', '藥品名稱']);
-            const chineseName = getValue(item, ['中文品名', '中文名稱']); // 中文名稱
+            const chineseName = getValue(item, ['中文品名', '中文名稱']);
             const code = getValue(item, ['代碼', '院內代碼']);
             const ingredient = getValue(item, ['主要成份', '成份']);
             const pharmClass = getValue(item, ['藥理分類名稱', '藥理分類']);
