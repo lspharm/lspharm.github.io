@@ -500,7 +500,6 @@
             const ingredient = getValue(item, ['主要成份', '成份']);
             const pharmClass = getValue(item, ['藥理分類名稱', '藥理分類']);
             const indication = getValue(item, ['適應症', '適應症(中文)']);
-            const warning = getValue(item, ['注意事項1', '注意事項', '藥品警語(中文)']);
             const storageLoc = getValue(item, ['儲存方式']);
             const nhiCode = getValue(item, ['健保碼']);
 
@@ -526,8 +525,6 @@
                         ${ingredient ? `<div class="block-ingredient"><span class="block-label"><i class="fas fa-flask me-1"></i>主要成份</span><div class="block-content">${ingredient}</div></div>` : ''}
                         ${indication ? `<div class="block-indication"><span class="block-label"><i class="fas fa-stethoscope me-1"></i>適應症</span><div class="block-content">${indication}</div></div>` : ''}
                         
-                        ${warning ? `<div class="mt-2 p-2 bg-light border rounded small text-danger text-content"><i class="fas fa-exclamation-circle me-1"></i>${warning}</div>` : ''}
-                            
                         ${storageLoc ? `<div class="divider"></div><div class="text-end text-muted small">儲位: ${storageLoc}</div>` : ''}
                     </div>
                 </div>
