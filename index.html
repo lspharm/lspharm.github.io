@@ -201,23 +201,23 @@
     const CORRECT_PASSWORD = "70100";
 
     function initAuth() {
-        // 1. 取得瀏覽器 User Agent
         const ua = navigator.userAgent.toLowerCase();
         const isLine = ua.indexOf('line') > -1;
-
-        // 2. 取得網址參數 (?from=...)
         const urlParams = new URLSearchParams(window.location.search);
         const source = urlParams.get('from');
 
-        // === 核心驗證邏輯：改為 linshin ===
-        // 必須同時滿足：(1) 是 LINE 瀏覽器 AND (2) 網址帶有正確的來源參數
+        // 核心驗證：是 LINE 且 來源正確
         const isFromCorrectGroup = (isLine && source === 'linshin');
 
         if (isFromCorrectGroup) {
-            // 符合條件 -> 自動解鎖
+            // === 關鍵技術：閱後即焚 ===
+            // 解鎖前，先用 JS 把網址列的參數清空
+            // 這樣如果使用者去按「複製連結」，複製到的會是沒有密碼的網址
+            const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
+            window.history.replaceState({path: cleanUrl}, '', cleanUrl);
+
             unlockApp();
         } else {
-            // 不符合條件 -> 顯示密碼框
             if (isLine && source !== 'linshin') {
                 document.getElementById('loginReason').innerText = "請使用社群專屬連結或輸入密碼";
             }
@@ -296,7 +296,7 @@
                 const type = getValue(item, ['中西藥別', '藥別']);
 
                 if (!name && !code) return;
-                if (type === '停用') return; // 停用過濾
+                if (type === '停用') return;
 
                 if (code.length > 0 && excludePrefixes.includes(code.charAt(0))) return; 
 
@@ -374,7 +374,6 @@
                 const ingr = getValue(item, ['主要成份', '成份']).toLowerCase();
                 const code = getValue(item, ['代碼', '院內代碼']).toLowerCase();
 
-                // 權重分配
                 if (ingr.includes(keyword)) score += 100;
                 if (name.includes(keyword)) score += 80;
                 if (chineseName.includes(keyword)) score += 60;
