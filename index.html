@@ -13,21 +13,14 @@
         
         /* --- 登入/攔截畫面樣式 --- */
         #loginScreen {
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: #f8f9fa;
-            z-index: 9999; /* 最高層級 */
-            display: flex; /* 預設開啟，JS判斷後隱藏 */
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
-            padding: 20px;
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #f8f9fa; z-index: 9999;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            text-align: center; padding: 20px;
         }
         .login-box {
             background: white; padding: 30px; border-radius: 15px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
-            max-width: 400px; width: 100%;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1); max-width: 400px; width: 100%;
         }
         .login-icon { font-size: 3rem; color: #1e3c72; margin-bottom: 15px; }
         .login-title { font-size: 1.5rem; font-weight: bold; color: #333; margin-bottom: 5px; }
@@ -109,7 +102,10 @@
         .info-row { margin-bottom: 10px; display: flex; flex-direction: column; }
         .info-label { font-weight: bold; color: #555; font-size: 0.9rem; margin-bottom: 2px; }
         .divider { border-top: 1px dashed #e0e0e0; margin: 12px 0; }
+        
         .badge-code { background-color: #6c757d; color: white; font-size: 0.9rem;}
+        .badge-nhi { background-color: #198754; color: white; font-size: 0.9rem; margin-right: 5px; }
+        
         .text-nhi { color: #0d6efd; font-weight: bold; } 
         
         .modal-header { background-color: #f8f9fa; border-bottom: 2px solid #e9ecef; }
@@ -180,11 +176,12 @@
                     <div class="d-flex justify-content-between align-items-start">
                         <div>
                             <span class="badge badge-code mb-1" id="modalCode">Code</span>
-                            <span class="badge bg-secondary mb-1" id="modalNhiCode" style="display:none;">健保碼</span>
+                            <span class="badge badge-nhi mb-1" id="modalNhiCode" style="display:none;">健保碼</span>
                         </div>
                         <span class="badge bg-info text-dark" id="modalClass">藥理分類</span>
                     </div>
                     <h3 class="modal-title fw-bold mt-2" id="modalTitle">藥品名稱</h3>
+                    <h5 class="text-primary fw-bold" id="modalChineseTitle">中文品名</h5>
                     <div class="text-secondary mt-1"><i class="fas fa-flask me-1"></i><span id="modalIngr">成份</span></div>
                 </div>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" style="margin-left: 10px;"></button>
@@ -208,11 +205,12 @@
         const isLine = ua.indexOf('line') > -1;
         
         // 如果是 LINE 瀏覽器，直接放行
+        // (開發測試用：解除下行註解可強制在電腦上預覽)
+        // const isLine = true; 
+
         if (isLine) {
             unlockApp();
         } else {
-            // 否則顯示登入畫面 (預設就是顯示的)
-            // 聚焦在輸入框
             setTimeout(() => document.getElementById('passInput').focus(), 500);
         }
     }
@@ -233,16 +231,13 @@
     function unlockApp() {
         document.getElementById('loginScreen').style.display = 'none';
         document.getElementById('appContent').style.display = 'block';
-        
-        // 解鎖後重新計算一下版面，確保置頂功能正常
         setTimeout(adjustLayout, 100);
     }
 
-    // 啟動驗證
     initAuth();
 
 
-    // --- 以下為主要應用程式邏輯 ---
+    // --- 主要程式邏輯 ---
     let drugList = [];     
     let foodList = [];     
     let currentMode = 'DRUG'; 
@@ -279,7 +274,6 @@
         complete: function(results) {
             const excludePrefixes = ['X', 'F', 'N']; 
             
-            // 診斷：如果完全沒讀到資料
             if (results.data.length === 0) {
                 document.getElementById('resultCount').innerText = "讀取到的資料為 0 筆";
                 return;
@@ -292,7 +286,7 @@
                 const type = getValue(item, ['中西藥別', '藥別']);
 
                 if (!name && !code) return;
-                if (type === '停用') return;
+                if (type === '停用') return; // 停用過濾
 
                 if (code.length > 0 && excludePrefixes.includes(code.charAt(0))) return; 
 
@@ -363,19 +357,32 @@
         }
 
         if (keyword) {
+            // === 搜尋排序邏輯優化 ===
             let scoredResults = result.map(item => {
                 let score = 0;
-                const name = getValue(item, ['名稱', '藥品名稱', '中文品名']).toLowerCase();
+                const name = getValue(item, ['名稱', '藥品名稱']).toLowerCase();
+                const chineseName = getValue(item, ['中文品名', '中文名稱']).toLowerCase();
                 const ingr = getValue(item, ['主要成份', '成份']).toLowerCase();
                 const code = getValue(item, ['代碼', '院內代碼']).toLowerCase();
 
-                if (name.includes(keyword) || ingr.includes(keyword)) score = 10;
-                else if (code.includes(keyword)) score = 5;
-                else if (Object.values(item).some(val => String(val).toLowerCase().includes(keyword))) score = 1;
+                // 權重分配：
+                // 1. 成分 (最高)
+                // 2. 英文名稱
+                // 3. 中文名稱
+                // 4. 代碼
+                
+                if (ingr.includes(keyword)) score += 100;
+                if (name.includes(keyword)) score += 80;
+                if (chineseName.includes(keyword)) score += 60;
+                if (code.includes(keyword)) score += 40;
+                
+                // 其他欄位模糊搜尋
+                if (Object.values(item).some(val => String(val).toLowerCase().includes(keyword))) score += 1;
 
                 return { item, score };
             });
 
+            // 過濾並排序
             result = scoredResults
                 .filter(x => x.score > 0)
                 .sort((a, b) => b.score - a.score)
@@ -400,7 +407,8 @@
         }
 
         items.forEach((item) => {
-            const name = getValue(item, ['名稱', '藥品名稱', '中文品名']);
+            const name = getValue(item, ['名稱', '藥品名稱']);
+            const chineseName = getValue(item, ['中文品名', '中文名稱']); // 取得中文名稱
             const code = getValue(item, ['代碼', '院內代碼']);
             const ingredient = getValue(item, ['主要成份', '成份']);
             const pharmClass = getValue(item, ['藥理分類名稱', '藥理分類']);
@@ -411,6 +419,7 @@
             const action = getValue(item, ['作用']);
             const warning = getValue(item, ['注意事項1', '注意事項', '藥品警語(中文)']);
             const storageLoc = getValue(item, ['儲存方式']);
+            const nhiCode = getValue(item, ['健保碼']);
 
             const col = document.createElement('div');
             col.className = 'col-lg-4 col-md-6 col-sm-12';
@@ -418,10 +427,15 @@
                 <div class="card drug-card" onclick='openDetail(${JSON.stringify(item).replace(/'/g, "&#39;")})'>
                     <div class="card-body">
                         <div class="d-flex justify-content-between mb-2">
-                            <span class="badge badge-code">${code}</span>
+                            <div>
+                                <span class="badge badge-code">${code}</span>
+                                ${nhiCode && nhiCode !== '0' ? `<span class="badge badge-nhi">${nhiCode}</span>` : ''}
+                            </div>
                         </div>
                         
-                        <h4 class="card-title fw-bold text-primary mb-2">${name}</h4>
+                        <h4 class="card-title fw-bold text-primary mb-1">${name}</h4>
+                        ${chineseName ? `<h5 class="card-subtitle text-dark fw-bold mb-2">${chineseName}</h5>` : ''}
+                        
                         <div class="text-secondary small mb-3"><i class="fas fa-flask me-1"></i>${ingredient}</div>
                         
                         ${pharmClass ? `<div class="badge bg-light text-dark border mb-3" style="white-space: normal; text-align:left;">${pharmClass}</div>` : ''}
@@ -444,7 +458,8 @@
     }
 
     window.openDetail = function(item) {
-        const name = getValue(item, ['名稱', '藥品名稱', '中文品名']);
+        const name = getValue(item, ['名稱', '藥品名稱']);
+        const chineseName = getValue(item, ['中文品名', '中文名稱']);
         const code = getValue(item, ['代碼', '院內代碼']);
         const ingredient = getValue(item, ['主要成份', '成份']);
         const pharmClass = getValue(item, ['藥理分類名稱', '藥理分類']);
@@ -458,6 +473,7 @@
         const nhiCode = getValue(item, ['健保碼']);
 
         document.getElementById('modalTitle').innerText = name;
+        document.getElementById('modalChineseTitle').innerText = chineseName || ''; // 詳情頁也顯示中文名
         document.getElementById('modalCode').innerText = code;
         document.getElementById('modalIngr').innerText = ingredient;
         document.getElementById('modalClass').innerText = pharmClass || '未分類';
