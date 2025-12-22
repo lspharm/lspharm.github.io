@@ -176,13 +176,19 @@
             results.data.forEach(item => {
                 const pharmName = (item['藥理分類名稱'] || '').trim();
                 const code = (item['代碼'] || item['院內代碼'] || Object.values(item)[0] || '').trim().toUpperCase();
+                const type = (item['中西藥別'] || '').trim(); // 取得中西藥別
 
-                // 1. 嚴格過濾垃圾資料
+                // 1. 停用檢查 (New!)
+                if (type === '停用') {
+                    return; // 直接跳過，不加入任何清單
+                }
+
+                // 2. 嚴格過濾垃圾資料 (X, F, N 開頭)
                 if (code.length > 0 && excludePrefixes.includes(code.charAt(0))) {
                     return; 
                 }
 
-                // 2. 分流：藥品 vs 食品
+                // 3. 分流：藥品 vs 食品
                 if (pharmName.includes('食品') || pharmName.includes('營養')) {
                     foodList.push(item);
                 } else {
@@ -250,7 +256,7 @@
         if (keyword) {
             let scoredResults = result.map(item => {
                 let score = 0;
-                // 更新：對應新CSV的欄位名稱
+                // 對應 CSV 欄位
                 const name = (item['名稱'] || item['藥品名稱'] || '').toLowerCase();
                 const ingr = (item['主要成份'] || '').toLowerCase();
                 const code = (item['代碼'] || item['院內代碼'] || '').toLowerCase();
