@@ -11,31 +11,6 @@
         /* 預留頂部空間 */
         body { background-color: #f0f2f5; font-family: "Microsoft JhengHei", "Heiti TC", Arial, sans-serif; padding-top: 240px; }
         
-        /* --- 登入/攔截畫面樣式 --- */
-        #loginScreen {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: #f8f9fa; z-index: 9999;
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-            text-align: center; padding: 20px;
-        }
-        .login-box {
-            background: white; padding: 30px; border-radius: 15px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.1); max-width: 400px; width: 100%;
-        }
-        .login-icon { font-size: 3rem; color: #1e3c72; margin-bottom: 15px; }
-        .login-title { font-size: 1.5rem; font-weight: bold; color: #333; margin-bottom: 5px; }
-        .login-sub { color: #666; font-size: 0.9rem; margin-bottom: 20px; }
-        .login-input { 
-            width: 100%; padding: 10px; margin-bottom: 15px; 
-            border: 2px solid #e9ecef; border-radius: 8px; text-align: center; font-size: 1.2rem; 
-        }
-        .login-btn { 
-            width: 100%; padding: 10px; background: #1e3c72; color: white; 
-            border: none; border-radius: 8px; font-weight: bold; font-size: 1rem; cursor: pointer; 
-        }
-        .login-btn:hover { background: #152b55; }
-        .error-msg { color: #dc3545; font-size: 0.9rem; margin-top: 10px; display: none; }
-
         /* 固定置頂區域 */
         .fixed-header {
             position: fixed; top: 0; left: 0; width: 100%; z-index: 1000;
@@ -142,58 +117,42 @@
 </head>
 <body>
 
-<div id="loginScreen">
-    <div class="login-box">
-        <i class="fas fa-lock login-icon"></i>
-        <div class="login-title">林新醫院處方集</div>
-        <div class="login-sub" id="loginReason">系統管制區，請輸入密碼</div>
+<div class="fixed-header" id="myHeader">
+    <div class="container text-center">
+        <h4 class="mb-2 fw-bold d-none d-md-block"><i class="fas fa-capsules me-2"></i>林新醫院藥品處方集</h4>
         
-        <input type="password" id="passInput" class="login-input" placeholder="請輸入密碼" onkeyup="if(event.keyCode===13) checkPassword()">
-        <button class="login-btn" onclick="checkPassword()">確認</button>
-        <div class="error-msg" id="loginError">密碼錯誤，請重新輸入</div>
+        <div class="mode-switch-container">
+            <button class="mode-btn active" id="btnModeDrug" onclick="switchMode('DRUG')">💊 藥品查詢</button>
+            <button class="mode-btn" id="btnModeFood" onclick="switchMode('FOOD')">🍎 食品/營養品</button>
+        </div>
+
+        <div class="search-container">
+            <input type="text" id="searchInput" class="form-control shadow-sm" placeholder="輸入名稱、成分、代碼..." autocomplete="off" disabled>
+            
+            <select id="pharmSelect" class="pharm-select" onchange="applyFilters()">
+                <option value="">📂 依藥理分類篩選 (全部)</option>
+            </select>
+
+            <div class="filter-container" id="drugFilters">
+                <button class="filter-btn active" onclick="setFilter('ALL', this)">全部</button>
+                <button class="filter-btn" onclick="setFilter('O', this)">口服 (O)</button>
+                <button class="filter-btn" onclick="setFilter('I', this)">針劑 (I)</button>
+                <button class="filter-btn" onclick="setFilter('E', this)">外用 (E)</button>
+                <button class="filter-btn" onclick="setFilter('P', this)">眼用 (P)</button>
+                <button class="filter-btn" onclick="setFilter('L', this)">水劑 (L)</button>
+                <button class="filter-btn" onclick="setFilter('J', this)">洗腎專用 (J)</button>
+            </div>
+        </div>
     </div>
 </div>
 
-<div id="appContent" style="display:none;">
-
-    <div class="fixed-header" id="myHeader">
-        <div class="container text-center">
-            <h4 class="mb-2 fw-bold d-none d-md-block"><i class="fas fa-capsules me-2"></i>林新醫院藥品處方集</h4>
-            
-            <div class="mode-switch-container">
-                <button class="mode-btn active" id="btnModeDrug" onclick="switchMode('DRUG')">💊 藥品查詢</button>
-                <button class="mode-btn" id="btnModeFood" onclick="switchMode('FOOD')">🍎 食品/營養品</button>
-            </div>
-
-            <div class="search-container">
-                <input type="text" id="searchInput" class="form-control shadow-sm" placeholder="輸入名稱、成分、代碼..." autocomplete="off" disabled>
-                
-                <select id="pharmSelect" class="pharm-select" onchange="applyFilters()">
-                    <option value="">📂 依藥理分類篩選 (全部)</option>
-                </select>
-
-                <div class="filter-container" id="drugFilters">
-                    <button class="filter-btn active" onclick="setFilter('ALL', this)">全部</button>
-                    <button class="filter-btn" onclick="setFilter('O', this)">口服 (O)</button>
-                    <button class="filter-btn" onclick="setFilter('I', this)">針劑 (I)</button>
-                    <button class="filter-btn" onclick="setFilter('E', this)">外用 (E)</button>
-                    <button class="filter-btn" onclick="setFilter('P', this)">眼用 (P)</button>
-                    <button class="filter-btn" onclick="setFilter('L', this)">水劑 (L)</button>
-                    <button class="filter-btn" onclick="setFilter('J', this)">洗腎專用 (J)</button>
-                </div>
-            </div>
-        </div>
+<div class="container mb-5" id="mainContainer">
+    <div class="d-flex justify-content-between align-items-center mb-3 px-2">
+        <span class="fw-bold text-primary" id="resultCount"></span>
     </div>
-
-    <div class="container mb-5" id="mainContainer">
-        <div class="d-flex justify-content-between align-items-center mb-3 px-2">
-            <span class="fw-bold text-primary" id="resultCount"></span>
-        </div>
-        <div id="errorBox" class="alert alert-danger" style="display:none;"></div>
-        <div id="drugList" class="row g-4"></div>
-        <div id="loadMoreContainer"></div> 
-    </div>
-
+    <div id="errorBox" class="alert alert-danger" style="display:none;"></div>
+    <div id="drugList" class="row g-4"></div>
+    <div id="loadMoreContainer"></div> 
 </div>
 
 <div class="modal fade" id="drugModal" tabindex="-1">
@@ -225,52 +184,10 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
 <script>
-    const CORRECT_PASSWORD = "70100";
+    // 移除驗證邏輯，直接公開存取
     const ITEMS_PER_PAGE = 20; 
     let currentLimit = ITEMS_PER_PAGE;
     let currentFilteredData = []; 
-
-    function initAuth() {
-        try {
-            const ua = navigator.userAgent.toLowerCase();
-            const isLine = ua.indexOf('line') > -1;
-            const urlParams = new URLSearchParams(window.location.search);
-            const source = urlParams.get('from');
-
-            const isFromCorrectGroup = (isLine && source === 'linshin');
-
-            if (isFromCorrectGroup) {
-                try {
-                    const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
-                    window.history.replaceState({path: cleanUrl}, '', cleanUrl);
-                } catch(e) { }
-                unlockApp();
-            } else {
-                if (isLine && source !== 'linshin') {
-                    document.getElementById('loginReason').innerText = "請使用社群專屬連結或輸入密碼";
-                }
-            }
-        } catch (e) { console.error(e); }
-    }
-
-    function checkPassword() {
-        const input = document.getElementById('passInput').value;
-        const errorMsg = document.getElementById('loginError');
-        if (input === CORRECT_PASSWORD) {
-            unlockApp();
-        } else {
-            errorMsg.style.display = 'block';
-            document.getElementById('passInput').value = '';
-        }
-    }
-
-    function unlockApp() {
-        document.getElementById('loginScreen').style.display = 'none';
-        document.getElementById('appContent').style.display = 'block';
-        setTimeout(adjustLayout, 100);
-    }
-
-    initAuth();
 
     let drugList = [];     
     let foodList = [];     
@@ -362,6 +279,7 @@
 
             document.getElementById('searchInput').disabled = false;
             switchMode('DRUG'); 
+            setTimeout(adjustLayout, 100); // 確保載入後版面正確
         },
         error: function(err) {
             document.getElementById('resultCount').innerText = "讀取失敗";
